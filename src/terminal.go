@@ -2593,10 +2593,24 @@ func (t *Terminal) Loop() {
 				t.input = append(append(t.input[:t.cx], t.yanked...), suffix...)
 				t.cx += len(t.yanked)
 			case actPageUp:
-				t.vmove(t.maxItems()-1, false)
+				prevOffset := t.offset
+				t.offset = util.Constrain(t.offset - t.maxItems(), 0, util.Max(t.merger.Length() - t.maxItems(), 0))
+				if prevOffset == t.offset {
+					t.vset(0)
+				} else {
+//					t.vmove(prevOffset - t.offset, false)
+					t.vset(t.offset + t.maxItems() - 1)
+				}
 				req(reqList)
 			case actPageDown:
-				t.vmove(-(t.maxItems() - 1), false)
+				prevOffset := t.offset
+				t.offset = util.Constrain(t.offset + t.maxItems(), 0, util.Max(t.merger.Length() - t.maxItems(), 0))
+				if prevOffset == t.offset {
+					t.vset(t.merger.Length())
+				} else {
+//					t.vmove(prevOffset - t.offset, false)
+					t.vset(t.offset)
+				}
 				req(reqList)
 			case actHalfPageUp:
 				t.vmove(t.maxItems()/2, false)
