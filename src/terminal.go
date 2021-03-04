@@ -159,6 +159,7 @@ type Terminal struct {
 	theme        *tui.ColorTheme
 	tui          tui.Renderer
 	executing    *util.AtomicBool
+	focusPreview bool
 }
 
 type selectedItem struct {
@@ -257,6 +258,7 @@ const (
 	actReplaceQuery
 	actToggleSort
 	actTogglePreview
+	actTogglePreviewFocus
 	actTogglePreviewWrap
 	actPreview
 	actPreviewTop
@@ -529,7 +531,8 @@ func NewTerminal(opts *Options, eventBox *util.EventBox) *Terminal {
 		killChan:    make(chan int),
 		tui:         renderer,
 		initFunc:    func() { renderer.Init() },
-		executing:   util.NewAtomicBool(false)}
+		executing:   util.NewAtomicBool(false),
+		focusPreview: false}
 	t.prompt, t.promptLen = t.parsePrompt(opts.Prompt)
 	t.pointer, t.pointerLen = t.processTabs([]rune(opts.Pointer), 0)
 	t.marker, t.markerLen = t.processTabs([]rune(opts.Marker), 0)
@@ -992,6 +995,9 @@ func (t *Terminal) printInfo() {
 		} else {
 			output += " -S"
 		}
+	}
+	if t.hasPreviewWindow() && t.focusPreview {
+		output += " <Focusing Preview>"
 	}
 	if t.multi > 0 {
 		if t.multi == maxMulti {
@@ -2256,6 +2262,11 @@ func (t *Terminal) Loop() {
 						}
 					}
 				}
+			case actTogglePreviewFocus:
+				if t.hasPreviewer() && t.previewer.enabled {
+					t.focusPreview = !t.focusPreview
+					req(reqInfo)
+				}
 			case actTogglePreviewWrap:
 				if t.hasPreviewWindow() {
 					t.previewOpts.wrap = !t.previewOpts.wrap
@@ -2433,11 +2444,19 @@ func (t *Terminal) Loop() {
 					req(reqList)
 				}
 			case actDown:
-				t.vmove(-1, true)
-				req(reqList)
+				if t.hasPreviewWindow() && t.focusPreview {
+					scrollPreviewBy(1)
+				} else {
+					t.vmove(-1, true)
+					req(reqList)
+				}
 			case actUp:
-				t.vmove(1, true)
-				req(reqList)
+				if t.hasPreviewWindow() && t.focusPreview {
+					scrollPreviewBy(-1)
+				} else {
+					t.vmove(1, true)
+					req(reqList)
+				}
 			case actAccept:
 				req(reqClose)
 			case actAcceptNonEmpty:
@@ -2483,25 +2502,33 @@ func (t *Terminal) Loop() {
 				t.input = append(append(t.input[:t.cx], t.yanked...), suffix...)
 				t.cx += len(t.yanked)
 			case actPageUp:
-				prevOffset := t.offset
-				t.offset = util.Constrain(t.offset - t.maxItems(), 0, util.Max(t.merger.Length() - t.maxItems(), 0))
-				if prevOffset == t.offset {
-					t.vset(0)
+				if t.hasPreviewWindow() && t.focusPreview {
+					scrollPreviewBy(-t.pwindow.Height())
 				} else {
-//					t.vmove(prevOffset - t.offset, false)
-					t.vset(t.offset + t.maxItems() - 1)
+					prevOffset := t.offset
+					t.offset = util.Constrain(t.offset - t.maxItems(), 0, util.Max(t.merger.Length() - t.maxItems(), 0))
+					if prevOffset == t.offset {
+						t.vset(0)
+					} else {
+	//					t.vmove(prevOffset - t.offset, false)
+						t.vset(t.offset + t.maxItems() - 1)
+					}
+					req(reqList)
 				}
-				req(reqList)
 			case actPageDown:
-				prevOffset := t.offset
-				t.offset = util.Constrain(t.offset + t.maxItems(), 0, util.Max(t.merger.Length() - t.maxItems(), 0))
-				if prevOffset == t.offset {
-					t.vset(t.merger.Length())
+				if t.hasPreviewWindow() && t.focusPreview {
+					scrollPreviewBy(t.pwindow.Height())
 				} else {
-//					t.vmove(prevOffset - t.offset, false)
-					t.vset(t.offset)
+					prevOffset := t.offset
+					t.offset = util.Constrain(t.offset + t.maxItems(), 0, util.Max(t.merger.Length() - t.maxItems(), 0))
+					if prevOffset == t.offset {
+						t.vset(t.merger.Length())
+					} else {
+	//					t.vmove(prevOffset - t.offset, false)
+						t.vset(t.offset)
+					}
+					req(reqList)
 				}
-				req(reqList)
 			case actHalfPageUp:
 				t.vmove(t.maxItems()/2, false)
 				req(reqList)
