@@ -986,9 +986,10 @@ func (t *Terminal) printInfo() {
 		return
 	}
 
+	cursor := t.cy
 	found := t.merger.Length()
 	total := util.Max(found, t.count)
-	output := fmt.Sprintf("%d/%d", found, total)
+	output := fmt.Sprintf("%d,%d/%d", cursor, found, total)
 	if t.toggleSort {
 		if t.sort {
 			output += " +S"
@@ -2436,26 +2437,26 @@ func (t *Terminal) Loop() {
 			case actToggleDown:
 				if t.multi > 0 && t.merger.Length() > 0 && toggle() {
 					t.vmove(-1, true)
-					req(reqList)
+					req(reqList, reqInfo)
 				}
 			case actToggleUp:
 				if t.multi > 0 && t.merger.Length() > 0 && toggle() {
 					t.vmove(1, true)
-					req(reqList)
+					req(reqList, reqInfo)
 				}
 			case actDown:
 				if t.hasPreviewWindow() && t.focusPreview {
 					scrollPreviewBy(1)
 				} else {
 					t.vmove(-1, true)
-					req(reqList)
+					req(reqList, reqInfo)
 				}
 			case actUp:
 				if t.hasPreviewWindow() && t.focusPreview {
 					scrollPreviewBy(-1)
 				} else {
 					t.vmove(1, true)
-					req(reqList)
+					req(reqList, reqInfo)
 				}
 			case actAccept:
 				req(reqClose)
@@ -2476,10 +2477,10 @@ func (t *Terminal) Loop() {
 				}
 			case actFirst:
 				t.vset(0)
-				req(reqList)
+				req(reqList, reqInfo)
 			case actLast:
 				t.vset(t.merger.Length() - 1)
-				req(reqList)
+				req(reqList, reqInfo)
 			case actUnixLineDiscard:
 				beof = len(t.input) == 0
 				if t.cx > 0 {
@@ -2513,7 +2514,7 @@ func (t *Terminal) Loop() {
 	//					t.vmove(prevOffset - t.offset, false)
 						t.vset(t.offset + t.maxItems() - 1)
 					}
-					req(reqList)
+					req(reqList, reqInfo)
 				}
 			case actPageDown:
 				if t.hasPreviewWindow() && t.focusPreview {
@@ -2527,14 +2528,14 @@ func (t *Terminal) Loop() {
 	//					t.vmove(prevOffset - t.offset, false)
 						t.vset(t.offset)
 					}
-					req(reqList)
+					req(reqList, reqInfo)
 				}
 			case actHalfPageUp:
 				t.vmove(t.maxItems()/2, false)
-				req(reqList)
+				req(reqList, reqInfo)
 			case actHalfPageDown:
 				t.vmove(-(t.maxItems() / 2), false)
-				req(reqList)
+				req(reqList, reqInfo)
 			case actJump:
 				t.jumping = jumpEnabled
 				req(reqJump)
@@ -2604,7 +2605,7 @@ func (t *Terminal) Loop() {
 							toggle()
 						}
 						t.vmove(me.S, true)
-						req(reqList)
+						req(reqList, reqInfo)
 					} else if t.hasPreviewWindow() && t.pwindow.Enclose(my, mx) {
 						scrollPreviewBy(-me.S)
 					}
@@ -2643,7 +2644,7 @@ func (t *Terminal) Loop() {
 							if t.vset(t.offset+my-min) && t.multi > 0 && me.Mod {
 								toggle()
 							}
-							req(reqList)
+							req(reqList, reqInfo)
 							if me.Left {
 								return doActions(actionsFor(tui.LeftClick))
 							}
@@ -2700,7 +2701,7 @@ func (t *Terminal) Loop() {
 				}
 			}
 			t.jumping = jumpDisabled
-			req(reqList)
+			req(reqList, reqInfo)
 		}
 
 		if queryChanged {
