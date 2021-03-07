@@ -939,6 +939,12 @@ func parseKeymap(keymap map[tui.Event][]action, str string) {
 				appendAction(actEnableSearch)
 			case "disable-search":
 				appendAction(actDisableSearch)
+			case "enable-reload":
+				appendAction(actEnableReload)
+			case "disable-reload":
+				appendAction(actDisableReload)
+			case "toggle-reload":
+				appendAction(actToggleReload)
 			default:
 				t := isExecuteAction(specLower)
 				if t == actIgnore {
