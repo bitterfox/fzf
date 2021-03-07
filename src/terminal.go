@@ -2,6 +2,7 @@ package fzf
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -228,7 +229,8 @@ const (
 	reqPreviewDisplay
 	reqPreviewRefresh
 	reqPreviewDelayed
-	reqQuit
+	reqQuitInterrupt
+	reqQuitOk
 )
 
 type action struct {
@@ -306,6 +308,7 @@ const (
 	actPreviousHistory
 	actNextHistory
 	actExecute
+	actExecuteAndExitOnSuccess
 	actExecuteSilent
 	actExecuteMulti // Deprecated
 	actSigStop
@@ -1819,30 +1822,32 @@ func (t *Terminal) redraw(clear bool) {
 	t.printAll()
 }
 
-func (t *Terminal) executeCommand(template string, forcePlus bool, background bool) {
+func (t *Terminal) executeCommand(template string, forcePlus bool, background bool) error {
 	valid, list := t.buildPlusList(template, forcePlus)
 	if !valid {
-		return
+		return errors.New("Invalid")
 	}
 	command := t.replacePlaceholder(template, forcePlus, string(t.input), list)
 	cmd := util.ExecCommand(command, false)
 	t.executing.Set(true)
+	var e error
 	if !background {
 		cmd.Stdin = tui.TtyIn()
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		t.tui.Pause(true)
-		cmd.Run()
+		e = cmd.Run()
 		t.tui.Resume(true, false)
 		t.redraw(true)
 		t.refresh()
 	} else {
 		t.tui.Pause(false)
-		cmd.Run()
+		e = cmd.Run()
 		t.tui.Resume(false, false)
 	}
 	t.executing.Set(false)
 	cleanTemporaryFiles()
+	return e
 }
 
 func (t *Terminal) hasPreviewer() bool {
@@ -1960,7 +1965,7 @@ func (t *Terminal) Loop() {
 			for s := range intChan {
 				// Don't quit by SIGINT while executing because it should be for the executing command and not for fzf itself
 				if !(s == os.Interrupt && t.executing.Get()) {
-					t.reqBox.Set(reqQuit, nil)
+					t.reqBox.Set(reqQuitInterrupt, nil)
 				}
 			}
 		}()
@@ -2267,8 +2272,11 @@ func (t *Terminal) Loop() {
 							return exitOk
 						})
 						return
-					case reqQuit:
+					case reqQuitInterrupt:
 						exit(func() int { return exitInterrupt })
+						return
+					case reqQuitOk:
+						exit(func() int { return exitOk })
 						return
 					}
 				}
@@ -2296,7 +2304,7 @@ func (t *Terminal) Loop() {
 		req := func(evts ...util.EventType) {
 			for _, event := range evts {
 				events = append(events, event)
-				if event == reqClose || event == reqQuit {
+				if event == reqClose || event == reqQuitInterrupt || event == reqQuitOk {
 					looping = false
 				}
 			}
@@ -2366,6 +2374,10 @@ func (t *Terminal) Loop() {
 				t.executeCommand(a.a, false, a.t == actExecuteSilent)
 			case actExecuteMulti:
 				t.executeCommand(a.a, true, false)
+			case actExecuteAndExitOnSuccess:
+				if t.executeCommand(a.a, false, false) == nil {
+					req(reqQuitOk)
+				}
 			case actInvalid:
 				t.mutex.Unlock()
 				return false
@@ -2451,18 +2463,18 @@ func (t *Terminal) Loop() {
 					t.cx = len(t.input)
 				}
 			case actAbort:
-				req(reqQuit)
+				req(reqQuitInterrupt)
 			case actDeleteChar:
 				t.delChar()
 			case actDeleteCharEOF:
 				if !t.delChar() && t.cx == 0 {
-					req(reqQuit)
+					req(reqQuitInterrupt)
 				}
 			case actEndOfLine:
 				t.cx = len(t.input)
 			case actCancel:
 				if len(t.input) == 0 {
-					req(reqQuit)
+					req(reqQuitInterrupt)
 				} else {
 					t.yanked = t.input
 					t.input = []rune{}
@@ -2470,7 +2482,7 @@ func (t *Terminal) Loop() {
 				}
 			case actBackwardDeleteCharEOF:
 				if len(t.input) == 0 {
-					req(reqQuit)
+					req(reqQuitInterrupt)
 				} else if t.cx > 0 {
 					t.input = append(t.input[:t.cx-1], t.input[t.cx:]...)
 					t.cx--
@@ -2505,7 +2517,7 @@ func (t *Terminal) Loop() {
 				if t.isPreviewEnabled() {
 					togglePreview(false)
 				} else {
-					req(reqQuit)
+					req(reqQuitInterrupt)
 				}
 			case actSelect:
 				current := t.currentItem()
