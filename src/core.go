@@ -238,6 +238,7 @@ func Run(opts *Options, version string, revision string) {
 		go reader.restart(command)
 	}
 	eventBox.Watch(EvtReadNew)
+	prevPaused := terminal.paused
 	query := []rune{}
 	for {
 		delay := true
@@ -246,9 +247,10 @@ func Run(opts *Options, version string, revision string) {
 			paused, input := terminal.Input()
 			if reloaded && paused {
 				query = []rune{}
-			} else if !paused {
+			} else if !paused || paused != prevPaused {
 				query = input
 			}
+			prevPaused = paused
 			return query
 		}
 		eventBox.Wait(func(events *util.Events) {

@@ -1006,6 +1006,12 @@ func parseKeymap(keymap map[tui.Event][]*action, str string) {
 				} else {
 					errorExit("unable to put non-printable character: " + pair[0])
 				}
+			case "enable-reload":
+				appendAction(actEnableReload)
+			case "disable-reload":
+				appendAction(actDisableReload)
+			case "toggle-reload":
+				appendAction(actToggleReload)
 			default:
 				t := isExecuteAction(specLower)
 				if t == actIgnore {

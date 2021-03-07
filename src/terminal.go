@@ -190,6 +190,7 @@ type Terminal struct {
 	tui                tui.Renderer
 	executing          *util.AtomicBool
 	focusPreview bool
+	reloadEnabled bool
 }
 
 type selectedItem struct {
@@ -317,6 +318,9 @@ const (
 	actDeselect
 	actUnbind
 	actRebind
+	actEnableReload
+	actDisableReload
+	actToggleReload
 )
 
 type placeholderFlags struct {
@@ -579,7 +583,8 @@ func NewTerminal(opts *Options, eventBox *util.EventBox) *Terminal {
 		tui:                renderer,
 		initFunc:           func() { renderer.Init() },
 		executing:          util.NewAtomicBool(false),
-		focusPreview: false}
+		focusPreview: false,
+		reloadEnabled: true}
 	t.prompt, t.promptLen = t.parsePrompt(opts.Prompt)
 	t.pointer, t.pointerLen = t.processTabs([]rune(opts.Pointer), 0)
 	t.marker, t.markerLen = t.processTabs([]rune(opts.Marker), 0)
@@ -2766,6 +2771,9 @@ func (t *Terminal) Loop() {
 					}
 				}
 			case actReload:
+				if !t.reloadEnabled {
+					break
+				}
 				t.failed = nil
 
 				valid, list := t.buildPlusList(a.a, false)
@@ -2832,6 +2840,12 @@ func (t *Terminal) Loop() {
 						scrollPreviewTo(t.evaluateScrollOffset())
 					}
 				}
+			case actEnableReload:
+				t.reloadEnabled = true
+			case actDisableReload:
+				t.reloadEnabled = true
+			case actToggleReload:
+				t.reloadEnabled = !t.reloadEnabled
 			}
 			return true
 		}
