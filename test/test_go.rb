@@ -2016,6 +2016,157 @@ class TestGoFZF < TestBase
       nil
     end
   end
+
+  def test_preview_header
+    tmux.send_keys "seq 100 | #{FZF} --bind ctrl-k:preview-up+preview-up,ctrl-j:preview-down+preview-down+preview-down --preview 'seq 1000' --preview-window 'top:+{1}:~3'", :Enter
+    tmux.until { |lines| assert_equal 100, lines.item_count }
+    top5 = ->(lines) { lines.drop(1).take(5).map { |s| s[/[0-9]+/] } }
+    tmux.until do |lines|
+      assert_includes lines[1], '4/1000'
+      assert_equal(%w[1 2 3 4 5], top5[lines])
+    end
+    tmux.send_keys '55'
+    tmux.until do |lines|
+      assert_equal 1, lines.match_count
+      assert_equal(%w[1 2 3 55 56], top5[lines])
+    end
+    tmux.send_keys 'C-J'
+    tmux.until do |lines|
+      assert_equal(%w[1 2 3 58 59], top5[lines])
+    end
+    tmux.send_keys :BSpace
+    tmux.until do |lines|
+      assert_equal 19, lines.match_count
+      assert_equal(%w[1 2 3 5 6], top5[lines])
+    end
+    tmux.send_keys 'C-K'
+    tmux.until { |lines| assert_equal(%w[1 2 3 4 5], top5[lines]) }
+  end
+
+  def test_wrong_runewidth
+    path = tempname + '.txt'
+    height=0
+    File.open(path, 'w') { |f|
+      for i in 0..100 do
+        for j in 0..3 do
+          f.print('━')
+        end
+        f.puts('EOL')
+        height = height+1
+        for j in 0..5 do
+          f.print('_')
+        end
+        f.puts('EOL')
+        height = height+1
+      end
+    }
+
+    tmux.send_keys "cat -n #{path} | LC_ALL='ja_JP.UTF-8' #{fzf}", :Enter
+#    tmux.send_keys "cat -n #{path} | #{fzf}", :Enter
+    tmux.until { |lines| assert lines.any_include?('EOL') }
+    tmux.until { |lines|
+      for l in lines do
+        puts l
+        assert_match /^[^━]*━*EOL$/, l if l.include?('━')
+        assert_match /^[^_]*_*EOL$/, l if l.include?('_')
+      end
+    }
+    height.times {
+      tmux.send_keys :Up
+    }
+    tmux.until { |lines| assert lines.any_include?(" #{height} ") }
+    tmux.until { |lines|
+      for l in lines do
+        puts l
+        assert_match /^[^━]*━*EOL$/, l if l.include?('━')
+        assert_match /^[^_]*_*EOL$/, l if l.include?('_')
+      end
+    }
+    height.times {
+      tmux.send_keys :PgDn
+    }
+    tmux.until { |lines| assert lines.any_include?(" 1 ") }
+    tmux.until { |lines|
+      for l in lines do
+        puts l
+        assert_match /^[^━]*━*EOL$/, l if l.include?('━')
+        assert_match /^[^_]*_*EOL$/, l if l.include?('_')
+      end
+    }
+    tmux.send_keys :Enter
+    assert_match /^[^━]*━*EOL$/, readonce.chomp
+  ensure
+    begin
+#      File.unlink(path)
+    rescue StandardError
+      nil
+    end
+  end
+
+  def test_wrong_runewidth_preview
+    path = tempname + '.txt'
+    height = 0
+    File.open(path, 'w') { |f|
+      for i in 0..100 do
+        for j in 0..3 do
+          f.print('━')
+        end
+        f.puts('EOL')
+        height = height+1
+        for j in 0..5 do
+          f.print('_')
+        end
+        f.puts('EOL')
+        height = height+1
+      end
+    }
+
+    fzf_height = 0
+
+    tmux.send_keys "localedef -f UTF-8 -i ja_JP ja_JP", :Enter
+    tmux.send_keys "echo 'OK' | LC_ALL='ja_JP.UTF-8' #{fzf('--preview', "'cat -n #{path}'", '--bind ctrl-n:preview-down', '--bind ctrl-p:preview-up')}", :Enter
+#    tmux.send_keys "cat -n #{path} | #{fzf}", :Enter
+    tmux.until { |lines| assert lines.any_include?('EOL') }
+    tmux.until { |lines|
+      for l in lines do
+        puts l
+        assert_match /^[^━]*━*EOL[^━EOL]*$/, l if l.include?('━')
+        assert_match /^[^_]*_*EOL[^_EOL]*$/, l if l.include?('_')
+      end
+      fzf_height = lines.length - 2
+    }
+    (height - fzf_height).times {
+      tmux.send_keys "C-n"
+    }
+    tmux.until { |lines| assert lines.any_include?(" #{height} ") }
+    tmux.until { |lines|
+      for l in lines do
+        puts l
+        assert_match /^[^━]*━*EOL[^━EOL]*$/, l if l.include?('━')
+        assert_match /^[^_]*_*EOL[^_EOL]*$/, l if l.include?('_')
+      end
+    }
+    height.times {
+      tmux.send_keys "C-p"
+    }
+    tmux.until { |lines| assert lines.any_include?(" 1 ") }
+    tmux.until { |lines|
+      for l in lines do
+        puts l
+        assert_match /^[^━]*━*EOL[^━EOL]*$/, l if l.include?('━')
+        assert_match /^[^_]*_*EOL[^_EOL]*$/, l if l.include?('_')
+      end
+    }
+    tmux.send_keys :Enter
+    assert_equal "OK", readonce.chomp
+  ensure
+    begin
+#      File.unlink(path)
+    rescue StandardError
+      nil
+    end
+  end
+>>>>>>> e0066de... Clear lines before print to prevent remainig chars (#1526)
 end
 
 module TestShell
