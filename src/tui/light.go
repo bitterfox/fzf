@@ -959,7 +959,7 @@ func (w *LightWindow) Fill(text string) FillReturn {
 }
 
 func (w *LightWindow) CFill(fg Color, bg Color, attr Attr, text string) FillReturn {
-	w.Move(w.posy, w.posx)
+	w.MoveAndClear(w.posy, w.posx)
 	if fg == colDefault {
 		fg = w.fg
 	}

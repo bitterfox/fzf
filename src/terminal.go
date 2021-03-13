@@ -1190,7 +1190,7 @@ func (t *Terminal) printItem(result Result, line int, i int, current bool) {
 		return
 	}
 
-	t.move(line, 0, false)
+	t.move(line, 0, true)
 	if current {
 		if len(label) == 0 {
 			t.window.CPrint(tui.ColCurrentCursorEmpty, t.pointerEmpty)
@@ -1215,10 +1215,6 @@ func (t *Terminal) printItem(result Result, line int, i int, current bool) {
 			t.window.Print(t.markerEmpty)
 		}
 		newLine.width = t.printHighlighted(result, tui.ColNormal, tui.ColMatch, false, true)
-	}
-	fillSpaces := prevLine.width - newLine.width
-	if fillSpaces > 0 {
-		t.window.Print(strings.Repeat(" ", fillSpaces))
 	}
 	t.prevLines[i] = newLine
 }

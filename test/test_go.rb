@@ -2225,6 +2225,130 @@ class TestGoFZF < TestBase
     tmux.until { |lines| assert_equal 1, lines.match_count }
     tmux.until { |lines| assert_match(/^> SNIPSNIP.*SNIPSNIP$/, lines[-3]) }
   end
+
+  def test_wrong_runewidth
+    path = tempname + '.txt'
+    height=0
+    File.open(path, 'w') { |f|
+      for i in 0..100 do
+        for j in 0..3 do
+          f.print('━')
+        end
+        f.puts('EOL')
+        height = height+1
+        for j in 0..5 do
+          f.print('_')
+        end
+        f.puts('EOL')
+        height = height+1
+      end
+    }
+
+    tmux.send_keys "cat -n #{path} | LC_ALL='ja_JP.UTF-8' #{fzf}", :Enter
+#    tmux.send_keys "cat -n #{path} | #{fzf}", :Enter
+    tmux.until { |lines| assert lines.any_include?('EOL') }
+    tmux.until { |lines|
+      for l in lines do
+        puts l
+        assert_match /^[^━]*━*EOL$/, l if l.include?('━')
+        assert_match /^[^_]*_*EOL$/, l if l.include?('_')
+      end
+    }
+    height.times {
+      tmux.send_keys :Up
+    }
+    tmux.until { |lines| assert lines.any_include?(" #{height} ") }
+    tmux.until { |lines|
+      for l in lines do
+        puts l
+        assert_match /^[^━]*━*EOL$/, l if l.include?('━')
+        assert_match /^[^_]*_*EOL$/, l if l.include?('_')
+      end
+    }
+    height.times {
+      tmux.send_keys :PgDn
+    }
+    tmux.until { |lines| assert lines.any_include?(" 1 ") }
+    tmux.until { |lines|
+      for l in lines do
+        puts l
+        assert_match /^[^━]*━*EOL$/, l if l.include?('━')
+        assert_match /^[^_]*_*EOL$/, l if l.include?('_')
+      end
+    }
+    tmux.send_keys :Enter
+    assert_match /^[^━]*━*EOL$/, readonce.chomp
+  ensure
+    begin
+#      File.unlink(path)
+    rescue StandardError
+      nil
+    end
+  end
+
+  def test_wrong_runewidth_preview
+    path = tempname + '.txt'
+    height = 0
+    File.open(path, 'w') { |f|
+      for i in 0..100 do
+        for j in 0..3 do
+          f.print('━')
+        end
+        f.puts('EOL')
+        height = height+1
+        for j in 0..5 do
+          f.print('_')
+        end
+        f.puts('EOL')
+        height = height+1
+      end
+    }
+
+    fzf_height = 0
+
+    tmux.send_keys "localedef -f UTF-8 -i ja_JP ja_JP", :Enter
+    tmux.send_keys "echo 'OK' | LC_ALL='ja_JP.UTF-8' #{fzf('--preview', "'cat -n #{path}'", '--bind ctrl-n:preview-down', '--bind ctrl-p:preview-up')}", :Enter
+#    tmux.send_keys "cat -n #{path} | #{fzf}", :Enter
+    tmux.until { |lines| assert lines.any_include?('EOL') }
+    tmux.until { |lines|
+      for l in lines do
+        puts l
+        assert_match /^[^━]*━*EOL[^━EOL]*$/, l if l.include?('━')
+        assert_match /^[^_]*_*EOL[^_EOL]*$/, l if l.include?('_')
+      end
+      fzf_height = lines.length - 2
+    }
+    (height - fzf_height).times {
+      tmux.send_keys "C-n"
+    }
+    tmux.until { |lines| assert lines.any_include?(" #{height} ") }
+    tmux.until { |lines|
+      for l in lines do
+        puts l
+        assert_match /^[^━]*━*EOL[^━EOL]*$/, l if l.include?('━')
+        assert_match /^[^_]*_*EOL[^_EOL]*$/, l if l.include?('_')
+      end
+    }
+    height.times {
+      tmux.send_keys "C-p"
+    }
+    tmux.until { |lines| assert lines.any_include?(" 1 ") }
+    tmux.until { |lines|
+      for l in lines do
+        puts l
+        assert_match /^[^━]*━*EOL[^━EOL]*$/, l if l.include?('━')
+        assert_match /^[^_]*_*EOL[^_EOL]*$/, l if l.include?('_')
+      end
+    }
+    tmux.send_keys :Enter
+    assert_equal "OK", readonce.chomp
+  ensure
+    begin
+#      File.unlink(path)
+    rescue StandardError
+      nil
+    end
+  end
 end
 
 module TestShell
