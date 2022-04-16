@@ -259,6 +259,7 @@ const (
 	actCancel
 	actChangePrompt
 	actTogglePrompt
+	actDefaultPrompt
 	actClearScreen
 	actClearQuery
 	actClearSelection
@@ -2452,6 +2453,7 @@ func (t *Terminal) Loop() {
 				req(reqPrintQuery)
 			case actChangePrompt:
 				t.prompt, t.promptLen = t.parsePrompt(a.a)
+				t.useDefaultPrompt = false
 				req(reqPrompt)
 			case actTogglePrompt:
 				if t.useDefaultPrompt {
@@ -2460,6 +2462,10 @@ func (t *Terminal) Loop() {
 					t.prompt, t.promptLen = t.defaultPrompt, t.defaultPromptLen
 				}
 				t.useDefaultPrompt = !t.useDefaultPrompt
+				req(reqPrompt)
+			case actDefaultPrompt:
+				t.prompt, t.promptLen = t.defaultPrompt, t.defaultPromptLen
+				t.useDefaultPrompt = true
 				req(reqPrompt)
 			case actPreview:
 				togglePreview(true)

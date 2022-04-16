@@ -1016,6 +1016,8 @@ func parseKeymap(keymap map[tui.Event][]*action, str string) {
 				appendAction(actDisableReload)
 			case "toggle-reload":
 				appendAction(actToggleReload)
+			case "default-prompt":
+				appendAction(actDefaultPrompt)
 			default:
 				t := isExecuteAction(specLower)
 				if t == actIgnore {
