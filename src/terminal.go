@@ -192,6 +192,9 @@ type Terminal struct {
 	executing          *util.AtomicBool
 	focusPreview bool
 	reloadEnabled bool
+	useDefaultPrompt bool
+	defaultPrompt             func()
+	defaultPromptLen          int
 }
 
 type selectedItem struct {
@@ -255,6 +258,7 @@ const (
 	actBackwardWord
 	actCancel
 	actChangePrompt
+	actTogglePrompt
 	actClearScreen
 	actClearQuery
 	actClearSelection
@@ -587,8 +591,10 @@ func NewTerminal(opts *Options, eventBox *util.EventBox) *Terminal {
 		initFunc:           func() { renderer.Init() },
 		executing:          util.NewAtomicBool(false),
 		focusPreview: false,
-		reloadEnabled: true}
-	t.prompt, t.promptLen = t.parsePrompt(opts.Prompt)
+		reloadEnabled: true,
+		useDefaultPrompt: true}
+	t.defaultPrompt, t.defaultPromptLen = t.parsePrompt(opts.Prompt)
+	t.prompt, t.promptLen = t.defaultPrompt, t.defaultPromptLen
 	t.pointer, t.pointerLen = t.processTabs([]rune(opts.Pointer), 0)
 	t.marker, t.markerLen = t.processTabs([]rune(opts.Marker), 0)
 	// Pre-calculated empty pointer and marker signs
@@ -2446,6 +2452,14 @@ func (t *Terminal) Loop() {
 				req(reqPrintQuery)
 			case actChangePrompt:
 				t.prompt, t.promptLen = t.parsePrompt(a.a)
+				req(reqPrompt)
+			case actTogglePrompt:
+				if t.useDefaultPrompt {
+					t.prompt, t.promptLen = t.parsePrompt(a.a)
+				} else {
+					t.prompt, t.promptLen = t.defaultPrompt, t.defaultPromptLen
+				}
+				t.useDefaultPrompt = !t.useDefaultPrompt
 				req(reqPrompt)
 			case actPreview:
 				togglePreview(true)

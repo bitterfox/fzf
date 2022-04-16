@@ -798,7 +798,7 @@ func init() {
 	// Backreferences are not supported.
 	// "~!@#$%^&*;/|".each_char.map { |c| Regexp.escape(c) }.map { |c| "#{c}[^#{c}]*#{c}" }.join('|')
 	executeRegexp = regexp.MustCompile(
-		`(?si)[:+](execute(?:-multi|-silent|-and-exit-on-success)?|reload|preview|change-prompt|change-preview-window|change-preview|(?:re|un)bind):.+|[:+](execute(?:-multi|-silent|-and-exit-on-success)?|reload|preview|change-prompt|change-preview-window|change-preview|(?:re|un)bind)(\([^)]*\)|\[[^\]]*\]|~[^~]*~|![^!]*!|@[^@]*@|\#[^\#]*\#|\$[^\$]*\$|%[^%]*%|\^[^\^]*\^|&[^&]*&|\*[^\*]*\*|;[^;]*;|/[^/]*/|\|[^\|]*\|)`)
+		`(?si)[:+](execute(?:-multi|-silent|-and-exit-on-success)?|reload|preview|change-prompt|toggle-prompt|change-preview-window|change-preview|(?:re|un)bind):.+|[:+](execute(?:-multi|-silent|-and-exit-on-success)?|reload|preview|change-prompt|toggle-prompt|change-preview-window|change-preview|(?:re|un)bind)(\([^)]*\)|\[[^\]]*\]|~[^~]*~|![^!]*!|@[^@]*@|\#[^\#]*\#|\$[^\$]*\$|%[^%]*%|\^[^\^]*\^|&[^&]*&|\*[^\*]*\*|;[^;]*;|/[^/]*/|\|[^\|]*\|)`)
 }
 
 func parseKeymap(keymap map[tui.Event][]*action, str string) {
@@ -822,6 +822,8 @@ func parseKeymap(keymap map[tui.Event][]*action, str string) {
 			prefix = symbol + "rebind"
 		} else if strings.HasPrefix(src[1:], "change-prompt") {
 			prefix = symbol + "change-prompt"
+		} else if strings.HasPrefix(src[1:], "toggle-prompt") {
+			prefix = symbol + "toggle-prompt"
 		} else if src[len(prefix)] == '-' {
 			c := src[len(prefix)+1]
 			if c == 's' || c == 'S' {
@@ -1035,6 +1037,8 @@ func parseKeymap(keymap map[tui.Event][]*action, str string) {
 						offset = len("change-preview")
 					case actChangePrompt:
 						offset = len("change-prompt")
+					case actTogglePrompt:
+						offset = len("toggle-prompt")
 					case actUnbind:
 						offset = len("unbind")
 					case actRebind:
@@ -1101,6 +1105,8 @@ func isExecuteAction(str string) actionType {
 		return actChangePreview
 	case "change-prompt":
 		return actChangePrompt
+	case "toggle-prompt":
+		return actTogglePrompt
 	case "execute":
 		return actExecute
 	case "execute-silent":
