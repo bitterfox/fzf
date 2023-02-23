@@ -678,6 +678,16 @@ func parseTheme(defaultTheme *tui.ColorTheme, str string) *tui.ColorTheme {
 			}
 
 			mergeAttr := func(cattr *tui.ColorAttr) {
+				var foregroundColorSpecified = false
+				setColor := func(flag *bool, cattr *tui.ColorAttr, col tui.Color) {
+					if !*flag {
+						cattr.Color = col
+						*flag = true
+					} else {
+						cattr.BackgroundColor = col
+					}
+				}
+
 				for _, component := range components[1:] {
 					switch component {
 					case "regular":
@@ -695,47 +705,47 @@ func parseTheme(defaultTheme *tui.ColorTheme, str string) *tui.ColorTheme {
 					case "reverse":
 						cattr.Attr |= tui.Reverse
 					case "black":
-						cattr.Color = tui.Color(0)
+						setColor(&foregroundColorSpecified, cattr, tui.Color(0))
 					case "red":
-						cattr.Color = tui.Color(1)
+						setColor(&foregroundColorSpecified, cattr, tui.Color(1))
 					case "green":
-						cattr.Color = tui.Color(2)
+						setColor(&foregroundColorSpecified, cattr, tui.Color(2))
 					case "yellow":
-						cattr.Color = tui.Color(3)
+						setColor(&foregroundColorSpecified, cattr, tui.Color(3))
 					case "blue":
-						cattr.Color = tui.Color(4)
+						setColor(&foregroundColorSpecified, cattr, tui.Color(4))
 					case "magenta":
-						cattr.Color = tui.Color(5)
+						setColor(&foregroundColorSpecified, cattr, tui.Color(5))
 					case "cyan":
-						cattr.Color = tui.Color(6)
+						setColor(&foregroundColorSpecified, cattr, tui.Color(6))
 					case "white":
-						cattr.Color = tui.Color(7)
+						setColor(&foregroundColorSpecified, cattr, tui.Color(7))
 					case "bright-black", "gray", "grey":
-						cattr.Color = tui.Color(8)
+						setColor(&foregroundColorSpecified, cattr, tui.Color(8))
 					case "bright-red":
-						cattr.Color = tui.Color(9)
+						setColor(&foregroundColorSpecified, cattr, tui.Color(9))
 					case "bright-green":
-						cattr.Color = tui.Color(10)
+						setColor(&foregroundColorSpecified, cattr, tui.Color(10))
 					case "bright-yellow":
-						cattr.Color = tui.Color(11)
+						setColor(&foregroundColorSpecified, cattr, tui.Color(11))
 					case "bright-blue":
-						cattr.Color = tui.Color(12)
+						setColor(&foregroundColorSpecified, cattr, tui.Color(12))
 					case "bright-magenta":
-						cattr.Color = tui.Color(13)
+						setColor(&foregroundColorSpecified, cattr, tui.Color(13))
 					case "bright-cyan":
-						cattr.Color = tui.Color(14)
+						setColor(&foregroundColorSpecified, cattr, tui.Color(14))
 					case "bright-white":
-						cattr.Color = tui.Color(15)
+						setColor(&foregroundColorSpecified, cattr, tui.Color(15))
 					case "":
 					default:
 						if rrggbb.MatchString(component) {
-							cattr.Color = tui.HexToColor(component)
+							setColor(&foregroundColorSpecified, cattr, tui.HexToColor(component))
 						} else {
 							ansi32, err := strconv.Atoi(component)
 							if err != nil || ansi32 < -1 || ansi32 > 255 {
 								fail()
 							}
-							cattr.Color = tui.Color(ansi32)
+							setColor(&foregroundColorSpecified, cattr, tui.Color(ansi32))
 						}
 					}
 				}

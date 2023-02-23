@@ -153,10 +153,11 @@ func (c Color) is24() bool {
 type ColorAttr struct {
 	Color Color
 	Attr  Attr
+	BackgroundColor Color
 }
 
 func NewColorAttr() ColorAttr {
-	return ColorAttr{Color: colUndefined, Attr: AttrUndefined}
+	return ColorAttr{Color: colUndefined, Attr: AttrUndefined, BackgroundColor: colUndefined}
 }
 
 const (
@@ -444,47 +445,47 @@ var (
 func EmptyTheme() *ColorTheme {
 	return &ColorTheme{
 		Colored:      true,
-		Input:        ColorAttr{colUndefined, AttrUndefined},
-		Disabled:     ColorAttr{colUndefined, AttrUndefined},
-		Fg:           ColorAttr{colUndefined, AttrUndefined},
-		Bg:           ColorAttr{colUndefined, AttrUndefined},
-		PreviewFg:    ColorAttr{colUndefined, AttrUndefined},
-		PreviewBg:    ColorAttr{colUndefined, AttrUndefined},
-		DarkBg:       ColorAttr{colUndefined, AttrUndefined},
-		Gutter:       ColorAttr{colUndefined, AttrUndefined},
-		Prompt:       ColorAttr{colUndefined, AttrUndefined},
-		Match:        ColorAttr{colUndefined, AttrUndefined},
-		Current:      ColorAttr{colUndefined, AttrUndefined},
-		CurrentMatch: ColorAttr{colUndefined, AttrUndefined},
-		Spinner:      ColorAttr{colUndefined, AttrUndefined},
-		Info:         ColorAttr{colUndefined, AttrUndefined},
-		Cursor:       ColorAttr{colUndefined, AttrUndefined},
-		Selected:     ColorAttr{colUndefined, AttrUndefined},
-		Header:       ColorAttr{colUndefined, AttrUndefined},
-		Border:       ColorAttr{colUndefined, AttrUndefined}}
+		Input:        ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		Disabled:     ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		Fg:           ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		Bg:           ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		PreviewFg:    ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		PreviewBg:    ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		DarkBg:       ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		Gutter:       ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		Prompt:       ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		Match:        ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		Current:      ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		CurrentMatch: ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		Spinner:      ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		Info:         ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		Cursor:       ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		Selected:     ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		Header:       ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		Border:       ColorAttr{colUndefined, AttrUndefined, colUndefined}}
 }
 
 func NoColorTheme() *ColorTheme {
 	return &ColorTheme{
 		Colored:      false,
-		Input:        ColorAttr{colDefault, AttrRegular},
-		Disabled:     ColorAttr{colDefault, AttrRegular},
-		Fg:           ColorAttr{colDefault, AttrRegular},
-		Bg:           ColorAttr{colDefault, AttrRegular},
-		PreviewFg:    ColorAttr{colDefault, AttrRegular},
-		PreviewBg:    ColorAttr{colDefault, AttrRegular},
-		DarkBg:       ColorAttr{colDefault, AttrRegular},
-		Gutter:       ColorAttr{colDefault, AttrRegular},
-		Prompt:       ColorAttr{colDefault, AttrRegular},
-		Match:        ColorAttr{colDefault, Underline},
-		Current:      ColorAttr{colDefault, Reverse},
-		CurrentMatch: ColorAttr{colDefault, Reverse | Underline},
-		Spinner:      ColorAttr{colDefault, AttrRegular},
-		Info:         ColorAttr{colDefault, AttrRegular},
-		Cursor:       ColorAttr{colDefault, AttrRegular},
-		Selected:     ColorAttr{colDefault, AttrRegular},
-		Header:       ColorAttr{colDefault, AttrRegular},
-		Border:       ColorAttr{colDefault, AttrRegular}}
+		Input:        ColorAttr{colDefault, AttrRegular, colUndefined},
+		Disabled:     ColorAttr{colDefault, AttrRegular, colUndefined},
+		Fg:           ColorAttr{colDefault, AttrRegular, colUndefined},
+		Bg:           ColorAttr{colDefault, AttrRegular, colUndefined},
+		PreviewFg:    ColorAttr{colDefault, AttrRegular, colUndefined},
+		PreviewBg:    ColorAttr{colDefault, AttrRegular, colUndefined},
+		DarkBg:       ColorAttr{colDefault, AttrRegular, colUndefined},
+		Gutter:       ColorAttr{colDefault, AttrRegular, colUndefined},
+		Prompt:       ColorAttr{colDefault, AttrRegular, colUndefined},
+		Match:        ColorAttr{colDefault, Underline, colUndefined},
+		Current:      ColorAttr{colDefault, Reverse, colUndefined},
+		CurrentMatch: ColorAttr{colDefault, Reverse | Underline, colUndefined},
+		Spinner:      ColorAttr{colDefault, AttrRegular, colUndefined},
+		Info:         ColorAttr{colDefault, AttrRegular, colUndefined},
+		Cursor:       ColorAttr{colDefault, AttrRegular, colUndefined},
+		Selected:     ColorAttr{colDefault, AttrRegular, colUndefined},
+		Header:       ColorAttr{colDefault, AttrRegular, colUndefined},
+		Border:       ColorAttr{colDefault, AttrRegular, colUndefined}}
 }
 
 func errorExit(message string) {
@@ -495,69 +496,69 @@ func errorExit(message string) {
 func init() {
 	Default16 = &ColorTheme{
 		Colored:      true,
-		Input:        ColorAttr{colDefault, AttrUndefined},
-		Disabled:     ColorAttr{colUndefined, AttrUndefined},
-		Fg:           ColorAttr{colDefault, AttrUndefined},
-		Bg:           ColorAttr{colDefault, AttrUndefined},
-		PreviewFg:    ColorAttr{colUndefined, AttrUndefined},
-		PreviewBg:    ColorAttr{colUndefined, AttrUndefined},
-		DarkBg:       ColorAttr{colBlack, AttrUndefined},
-		Gutter:       ColorAttr{colUndefined, AttrUndefined},
-		Prompt:       ColorAttr{colBlue, AttrUndefined},
-		Match:        ColorAttr{colGreen, AttrUndefined},
-		Current:      ColorAttr{colYellow, AttrUndefined},
-		CurrentMatch: ColorAttr{colGreen, AttrUndefined},
-		Spinner:      ColorAttr{colGreen, AttrUndefined},
-		Info:         ColorAttr{colWhite, AttrUndefined},
-		Cursor:       ColorAttr{colRed, AttrUndefined},
-		Selected:     ColorAttr{colMagenta, AttrUndefined},
-		Header:       ColorAttr{colCyan, AttrUndefined},
-		Border:       ColorAttr{colBlack, AttrUndefined}}
+		Input:        ColorAttr{colDefault, AttrUndefined, colUndefined},
+		Disabled:     ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		Fg:           ColorAttr{colDefault, AttrUndefined, colUndefined},
+		Bg:           ColorAttr{colDefault, AttrUndefined, colUndefined},
+		PreviewFg:    ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		PreviewBg:    ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		DarkBg:       ColorAttr{colBlack, AttrUndefined, colUndefined},
+		Gutter:       ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		Prompt:       ColorAttr{colBlue, AttrUndefined, colUndefined},
+		Match:        ColorAttr{colGreen, AttrUndefined, colUndefined},
+		Current:      ColorAttr{colYellow, AttrUndefined, colUndefined},
+		CurrentMatch: ColorAttr{colGreen, AttrUndefined, colUndefined},
+		Spinner:      ColorAttr{colGreen, AttrUndefined, colUndefined},
+		Info:         ColorAttr{colWhite, AttrUndefined, colUndefined},
+		Cursor:       ColorAttr{colRed, AttrUndefined, colUndefined},
+		Selected:     ColorAttr{colMagenta, AttrUndefined, colUndefined},
+		Header:       ColorAttr{colCyan, AttrUndefined, colUndefined},
+		Border:       ColorAttr{colBlack, AttrUndefined, colUndefined}}
 	Dark256 = &ColorTheme{
 		Colored:      true,
-		Input:        ColorAttr{colDefault, AttrUndefined},
-		Disabled:     ColorAttr{colUndefined, AttrUndefined},
-		Fg:           ColorAttr{colDefault, AttrUndefined},
-		Bg:           ColorAttr{colDefault, AttrUndefined},
-		PreviewFg:    ColorAttr{colUndefined, AttrUndefined},
-		PreviewBg:    ColorAttr{colUndefined, AttrUndefined},
-		DarkBg:       ColorAttr{236, AttrUndefined},
-		Gutter:       ColorAttr{colUndefined, AttrUndefined},
-		Prompt:       ColorAttr{110, AttrUndefined},
-		Match:        ColorAttr{108, AttrUndefined},
-		Current:      ColorAttr{254, AttrUndefined},
-		CurrentMatch: ColorAttr{151, AttrUndefined},
-		Spinner:      ColorAttr{148, AttrUndefined},
-		Info:         ColorAttr{144, AttrUndefined},
-		Cursor:       ColorAttr{161, AttrUndefined},
-		Selected:     ColorAttr{168, AttrUndefined},
-		Header:       ColorAttr{109, AttrUndefined},
-		Border:       ColorAttr{59, AttrUndefined}}
+		Input:        ColorAttr{colDefault, AttrUndefined, colUndefined},
+		Disabled:     ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		Fg:           ColorAttr{colDefault, AttrUndefined, colUndefined},
+		Bg:           ColorAttr{colDefault, AttrUndefined, colUndefined},
+		PreviewFg:    ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		PreviewBg:    ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		DarkBg:       ColorAttr{236, AttrUndefined, colUndefined},
+		Gutter:       ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		Prompt:       ColorAttr{110, AttrUndefined, colUndefined},
+		Match:        ColorAttr{108, AttrUndefined, colUndefined},
+		Current:      ColorAttr{254, AttrUndefined, colUndefined},
+		CurrentMatch: ColorAttr{151, AttrUndefined, colUndefined},
+		Spinner:      ColorAttr{148, AttrUndefined, colUndefined},
+		Info:         ColorAttr{144, AttrUndefined, colUndefined},
+		Cursor:       ColorAttr{161, AttrUndefined, colUndefined},
+		Selected:     ColorAttr{168, AttrUndefined, colUndefined},
+		Header:       ColorAttr{109, AttrUndefined, colUndefined},
+		Border:       ColorAttr{59, AttrUndefined, colUndefined}}
 	Light256 = &ColorTheme{
 		Colored:      true,
-		Input:        ColorAttr{colDefault, AttrUndefined},
-		Disabled:     ColorAttr{colUndefined, AttrUndefined},
-		Fg:           ColorAttr{colDefault, AttrUndefined},
-		Bg:           ColorAttr{colDefault, AttrUndefined},
-		PreviewFg:    ColorAttr{colUndefined, AttrUndefined},
-		PreviewBg:    ColorAttr{colUndefined, AttrUndefined},
-		DarkBg:       ColorAttr{251, AttrUndefined},
-		Gutter:       ColorAttr{colUndefined, AttrUndefined},
-		Prompt:       ColorAttr{25, AttrUndefined},
-		Match:        ColorAttr{66, AttrUndefined},
-		Current:      ColorAttr{237, AttrUndefined},
-		CurrentMatch: ColorAttr{23, AttrUndefined},
-		Spinner:      ColorAttr{65, AttrUndefined},
-		Info:         ColorAttr{101, AttrUndefined},
-		Cursor:       ColorAttr{161, AttrUndefined},
-		Selected:     ColorAttr{168, AttrUndefined},
-		Header:       ColorAttr{31, AttrUndefined},
-		Border:       ColorAttr{145, AttrUndefined}}
+		Input:        ColorAttr{colDefault, AttrUndefined, colUndefined},
+		Disabled:     ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		Fg:           ColorAttr{colDefault, AttrUndefined, colUndefined},
+		Bg:           ColorAttr{colDefault, AttrUndefined, colUndefined},
+		PreviewFg:    ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		PreviewBg:    ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		DarkBg:       ColorAttr{251, AttrUndefined, colUndefined},
+		Gutter:       ColorAttr{colUndefined, AttrUndefined, colUndefined},
+		Prompt:       ColorAttr{25, AttrUndefined, colUndefined},
+		Match:        ColorAttr{66, AttrUndefined, colUndefined},
+		Current:      ColorAttr{237, AttrUndefined, colUndefined},
+		CurrentMatch: ColorAttr{23, AttrUndefined, colUndefined},
+		Spinner:      ColorAttr{65, AttrUndefined, colUndefined},
+		Info:         ColorAttr{101, AttrUndefined, colUndefined},
+		Cursor:       ColorAttr{161, AttrUndefined, colUndefined},
+		Selected:     ColorAttr{168, AttrUndefined, colUndefined},
+		Header:       ColorAttr{31, AttrUndefined, colUndefined},
+		Border:       ColorAttr{145, AttrUndefined, colUndefined}}
 }
 
 func initTheme(theme *ColorTheme, baseTheme *ColorTheme, forceBlack bool) {
 	if forceBlack {
-		theme.Bg = ColorAttr{colBlack, AttrUndefined}
+		theme.Bg = ColorAttr{colBlack, AttrUndefined, colUndefined}
 	}
 
 	o := func(a ColorAttr, b ColorAttr) ColorAttr {
@@ -567,6 +568,9 @@ func initTheme(theme *ColorTheme, baseTheme *ColorTheme, forceBlack bool) {
 		}
 		if b.Attr != AttrUndefined {
 			c.Attr = b.Attr
+		}
+		if b.BackgroundColor != colUndefined {
+			c.BackgroundColor = b.BackgroundColor
 		}
 		return c
 	}
@@ -596,6 +600,9 @@ func initPalette(theme *ColorTheme) {
 	pair := func(fg, bg ColorAttr) ColorPair {
 		if fg.Color == colDefault && (fg.Attr&Reverse) > 0 {
 			bg.Color = colDefault
+		}
+		if fg.BackgroundColor != colDefault && fg.BackgroundColor != colUndefined {
+			bg.Color = fg.BackgroundColor
 		}
 		return ColorPair{fg.Color, bg.Color, fg.Attr}
 	}
