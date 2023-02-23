@@ -51,6 +51,8 @@ var offsetComponentRegex *regexp.Regexp
 var offsetTrimCharsRegex *regexp.Regexp
 var activeTempFiles []string
 
+var whitespacesCache map[int]string = make(map[int]string)
+
 const clearCode string = "\x1b[2J"
 
 func init() {
@@ -193,6 +195,8 @@ type Terminal struct {
 	focusPreview bool
 	reloadEnabled bool
 	useDefaultPrompt bool
+	fillHeaderTillEnd bool
+	fillCurrentTillEnd bool
 	defaultPrompt             func()
 	defaultPromptLen          int
 }
@@ -593,7 +597,9 @@ func NewTerminal(opts *Options, eventBox *util.EventBox) *Terminal {
 		executing:          util.NewAtomicBool(false),
 		focusPreview: false,
 		reloadEnabled: true,
-		useDefaultPrompt: true}
+		useDefaultPrompt: true,
+		fillHeaderTillEnd: opts.FillHeader,
+		fillCurrentTillEnd: opts.FillCurrent}
 	t.defaultPrompt, t.defaultPromptLen = t.parsePrompt(opts.Prompt)
 	t.prompt, t.promptLen = t.defaultPrompt, t.defaultPromptLen
 	t.pointer, t.pointerLen = t.processTabs([]rune(opts.Pointer), 0)
@@ -630,7 +636,7 @@ func (t *Terminal) parsePrompt(prompt string) (func(), int) {
 	}
 	output := func() {
 		t.printHighlighted(
-			Result{item: item}, tui.ColPrompt, tui.ColPrompt, false, false)
+			Result{item: item}, tui.ColPrompt, tui.ColPrompt, false, false, false)
 	}
 	_, promptLen := t.processTabs([]rune(trimmed), 0)
 
@@ -1032,7 +1038,6 @@ func (t *Terminal) placeCursor() {
 func (t *Terminal) printPrompt() {
 	t.move(t.promptLine(), 0, true)
 	t.prompt()
-
 	before, after := t.updatePromptOffset()
 	color := tui.ColInput
 	if t.paused {
@@ -1040,6 +1045,24 @@ func (t *Terminal) printPrompt() {
 	}
 	t.window.CPrint(color, string(before))
 	t.window.CPrint(color, string(after))
+
+	if t.fillHeaderTillEnd {
+		maxWidth := util.Max(1, t.window.Width()-t.promptLen-1)
+		t.window.CPrint(color, t.whitespaces(maxWidth - (t.queryLen[0] + t.queryLen[1])))
+	}
+}
+
+func (t *Terminal) whitespaces(width int) string {
+	if width <= 0 {
+		return ""
+	}
+
+	var w, ok = whitespacesCache[width]
+	if !ok {
+		w = strings.Repeat(" ", width)
+		whitespacesCache[width] = w
+	}
+    return w
 }
 
 func (t *Terminal) trimMessage(message string, maxWidth int) string {
@@ -1056,16 +1079,22 @@ func (t *Terminal) printInfo() {
 	switch t.infoStyle {
 	case infoDefault:
 		t.move(line+1, 0, true)
+		whitespaces := 2
 		if t.reading {
 			duration := int64(spinnerDuration)
 			idx := (time.Now().UnixNano() % (duration * int64(len(t.spinner)))) / duration
 			t.window.CPrint(tui.ColSpinner, t.spinner[idx])
+            whitespaces--
 		}
+		if t.fillHeaderTillEnd {
+			t.window.CPrint(tui.ColSpinner, t.whitespaces(whitespaces))
+		}
+
 		t.move(line+1, 2, false)
 		pos = 2
 	case infoInline:
 		pos = t.promptLen + t.queryLen[0] + t.queryLen[1] + 1
-		if pos+len(" < ") > t.window.Width() {
+		if pos+len(" < ") > t.window.Width() - 1 {
 			return
 		}
 		t.move(line, pos, true)
@@ -1109,8 +1138,12 @@ func (t *Terminal) printInfo() {
 	if t.failed != nil && t.count == 0 {
 		output = fmt.Sprintf("[Command failed: %s]", *t.failed)
 	}
-	output = t.trimMessage(output, t.window.Width()-pos)
+	output = t.trimMessage(output, t.window.Width() - 1 - pos)
 	t.window.CPrint(tui.ColInfo, output)
+	infoWidth := pos + t.displayWidth([]rune(output))
+	if t.fillHeaderTillEnd {
+		t.window.CPrint(tui.ColInfo, t.whitespaces(t.window.Width() - 1 - infoWidth))
+	}
 }
 
 func (t *Terminal) printHeader() {
@@ -1142,9 +1175,14 @@ func (t *Terminal) printHeader() {
 			text:   util.ToChars([]byte(trimmed)),
 			colors: colors}
 
-		t.move(line, 2, true)
+		if t.fillHeaderTillEnd {
+			t.move(line, 0, true)
+			t.window.CPrint(tui.ColHeader, "  ")
+		} else {
+			t.move(line, 2, true)
+		}
 		t.printHighlighted(Result{item: item},
-			tui.ColHeader, tui.ColHeader, false, false)
+			tui.ColHeader, tui.ColHeader, false, false, t.fillHeaderTillEnd)
 	}
 }
 
@@ -1209,7 +1247,7 @@ func (t *Terminal) printItem(result Result, line int, i int, current bool) {
 		} else {
 			t.window.CPrint(tui.ColCurrentSelectedEmpty, t.markerEmpty)
 		}
-		newLine.width = t.printHighlighted(result, tui.ColCurrent, tui.ColCurrentMatch, true, true)
+		newLine.width = t.printHighlighted(result, tui.ColCurrent, tui.ColCurrentMatch, true, true, t.fillCurrentTillEnd)
 	} else {
 		if len(label) == 0 {
 			t.window.CPrint(tui.ColCursorEmpty, t.pointerEmpty)
@@ -1221,7 +1259,7 @@ func (t *Terminal) printItem(result Result, line int, i int, current bool) {
 		} else {
 			t.window.Print(t.markerEmpty)
 		}
-		newLine.width = t.printHighlighted(result, tui.ColNormal, tui.ColMatch, false, true)
+		newLine.width = t.printHighlighted(result, tui.ColNormal, tui.ColMatch, false, true, false)
 	}
 	t.prevLines[i] = newLine
 }
@@ -1264,7 +1302,7 @@ func (t *Terminal) overflow(runes []rune, max int) bool {
 	return t.displayWidthWithLimit(runes, 0, max) > max
 }
 
-func (t *Terminal) printHighlighted(result Result, colBase tui.ColorPair, colMatch tui.ColorPair, current bool, match bool) int {
+func (t *Terminal) printHighlighted(result Result, colBase tui.ColorPair, colMatch tui.ColorPair, current bool, match bool, fillTillEnd bool) int {
 	item := result.item
 
 	// Overflow
@@ -1369,6 +1407,9 @@ func (t *Terminal) printHighlighted(result Result, colBase tui.ColorPair, colMat
 	if index < maxOffset {
 		substr, _ = t.processTabs(text[index:], prefixWidth)
 		t.window.CPrint(colBase, substr)
+	}
+	if fillTillEnd {
+		t.window.CPrint(colBase, t.whitespaces(maxWidth - displayWidth))
 	}
 	return displayWidth
 }

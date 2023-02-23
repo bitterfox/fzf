@@ -77,6 +77,8 @@ const usage = `usage: fzf [options]
     --tabstop=SPACES      Number of spaces for a tab character (default: 8)
     --color=COLSPEC       Base scheme (dark|light|16|bw) and/or custom colors
     --no-bold             Do not use bold text
+    --fill-header         Fill header line till end
+    --fill-current        Fill header line till end
 
   History
     --history=FILE        History file
@@ -244,6 +246,8 @@ type Options struct {
 	Tabstop     int
 	ClearOnExit bool
 	Version     bool
+	FillHeader  bool
+	FillCurrent bool
 }
 
 func defaultPreviewOpts(command string) previewOpts {
@@ -306,7 +310,9 @@ func defaultOptions() *Options {
 		Unicode:     true,
 		Tabstop:     8,
 		ClearOnExit: true,
-		Version:     false}
+		Version:     false,
+		FillHeader:  false,
+		FillCurrent: false}
 }
 
 func help(code int) {
@@ -1542,6 +1548,10 @@ func parseOptions(opts *Options, allArgs []string) {
 			opts.ClearOnExit = false
 		case "--version":
 			opts.Version = true
+		case "--fill-header":
+			opts.FillHeader = true
+		case "--fill-current":
+			opts.FillCurrent = true
 		default:
 			if match, value := optString(arg, "--algo="); match {
 				opts.FuzzyAlgo = parseAlgo(value)
