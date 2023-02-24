@@ -815,7 +815,7 @@ func init() {
 	// Backreferences are not supported.
 	// "~!@#$%^&*;/|".each_char.map { |c| Regexp.escape(c) }.map { |c| "#{c}[^#{c}]*#{c}" }.join('|')
 	executeRegexp = regexp.MustCompile(
-		`(?si)[:+](execute(?:-multi|-silent|-and-exit-on-success)?|reload|preview|change-prompt|toggle-prompt|change-preview-window|change-preview|(?:re|un)bind):.+|[:+](execute(?:-multi|-silent|-and-exit-on-success)?|reload|preview|change-prompt|toggle-prompt|change-preview-window|change-preview|(?:re|un)bind)(\([^)]*\)|\[[^\]]*\]|~[^~]*~|![^!]*!|@[^@]*@|\#[^\#]*\#|\$[^\$]*\$|%[^%]*%|\^[^\^]*\^|&[^&]*&|\*[^\*]*\*|;[^;]*;|/[^/]*/|\|[^\|]*\|)`)
+		`(?si)[:+](execute(?:-multi|-silent|-and-exit-on-success)?|reload|preview|change-prompt|toggle-prompt|change-preview-window|change-preview|(?:re|un)bind):.+|[:+](execute(?:-multi|-silent|-and-exit-on-success)?|reload|preview|change-prompt|toggle-prompt|change-preview-window|change-preview|(?:re|un)bind|goto)(\([^)]*\)|\[[^\]]*\]|~[^~]*~|![^!]*!|@[^@]*@|\#[^\#]*\#|\$[^\$]*\$|%[^%]*%|\^[^\^]*\^|&[^&]*&|\*[^\*]*\*|;[^;]*;|/[^/]*/|\|[^\|]*\|)`)
 }
 
 func parseKeymap(keymap map[tui.Event][]*action, str string) {
@@ -841,6 +841,8 @@ func parseKeymap(keymap map[tui.Event][]*action, str string) {
 			prefix = symbol + "change-prompt"
 		} else if strings.HasPrefix(src[1:], "toggle-prompt") {
 			prefix = symbol + "toggle-prompt"
+		} else if strings.HasPrefix(src[1:], "goto") {
+			prefix = symbol + "goto"
 		} else if src[len(prefix)] == '-' {
 			c := src[len(prefix)+1]
 			if c == 's' || c == 'S' {
@@ -1068,6 +1070,8 @@ func parseKeymap(keymap map[tui.Event][]*action, str string) {
 						offset = len("execute-multi")
 					case actExecuteAndExitOnSuccess:
 						offset = len("execute-and-exit-on-success")
+					case actGoTo:
+						offset = len("goto")
 					default:
 						offset = len("execute")
 					}
@@ -1134,6 +1138,8 @@ func isExecuteAction(str string) actionType {
 		return actExecuteMulti
 	case "execute-and-exit-on-success":
 		return actExecuteAndExitOnSuccess
+	case "goto":
+		return actGoTo
 	}
 	return actIgnore
 }

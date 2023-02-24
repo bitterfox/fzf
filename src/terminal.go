@@ -333,6 +333,7 @@ const (
 	actEnableReload
 	actDisableReload
 	actToggleReload
+    actGoTo
 )
 
 type placeholderFlags struct {
@@ -2948,6 +2949,12 @@ func (t *Terminal) Loop() {
 				t.reloadEnabled = true
 			case actToggleReload:
 				t.reloadEnabled = !t.reloadEnabled
+			case actGoTo:
+				i, err := strconv.Atoi(a.a)
+				if err == nil {
+					t.vset(i)
+					req(reqList, reqInfo)
+				}
 			}
 			return true
 		}
