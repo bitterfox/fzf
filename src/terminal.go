@@ -1094,11 +1094,20 @@ func (t *Terminal) printInfo() {
 		pos = 2
 	case infoInline, infoInlineRight:
 		pos = t.promptLen + t.queryLen[0] + t.queryLen[1] + 1
-		if pos+len(" < ") > t.window.Width() - 1 {
-			return
+		if t.reading {
+			if pos+2 > t.window.Width() - 1 {
+				return
+			}
+		} else {
+			if pos+len(" < ") > t.window.Width() - 1 {
+				return
+			}
 		}
 		t.move(line, pos, true)
 		pos += len(" < ")
+		if t.reading {
+			pos += 2
+		}
 	case infoHidden:
 		return
 	}
@@ -1146,8 +1155,11 @@ func (t *Terminal) printInfo() {
 	}
 
 	if t.infoStyle == infoInline || t.infoStyle == infoInlineRight {
-		if t.reading {
-			t.window.CPrint(tui.ColSpinner, " < ")
+		if t.reading && pos > t.window.Width() - 1 {
+			output=""
+			pos -= len(" < ")
+			t.window.CPrint(tui.ColInfo, t.whitespaces(t.window.Width() - 1 - pos))
+			pos = t.window.Width() - 1
 		} else {
 			t.window.CPrint(tui.ColPrompt, " < ")
 		}
@@ -1156,6 +1168,12 @@ func (t *Terminal) printInfo() {
 	output = t.trimMessage(output, t.window.Width() - 1 - pos)
 	t.window.CPrint(tui.ColInfo, output)
 
+	if t.reading && (t.infoStyle == infoInline || t.infoStyle == infoInlineRight) {
+		duration := int64(spinnerDuration)
+		idx := (time.Now().UnixNano() % (duration * int64(len(t.spinner)))) / duration
+		t.window.CPrint(tui.ColInfo, " ")
+		t.window.CPrint(tui.ColSpinner, t.spinner[idx])
+	}
 	if t.infoStyle == infoInline {
 		fillInfoTillRight()
 	}
