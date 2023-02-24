@@ -238,6 +238,7 @@ const (
 	reqPreviewDelayed
 	reqQuitInterrupt
 	reqQuitOk
+	reqLoaded
 )
 
 type action struct {
@@ -665,6 +666,7 @@ func (t *Terminal) UpdateCount(cnt int, final bool, failedCommand *string) {
 	t.reqBox.Set(reqInfo, nil)
 	if final {
 		t.reqBox.Set(reqRefresh, nil)
+		t.reqBox.Set(reqLoaded, nil)
 	}
 }
 
@@ -2034,6 +2036,7 @@ func (t *Terminal) cancelPreview() {
 
 // Loop is called to start Terminal I/O
 func (t *Terminal) Loop() {
+	looping := true
 	// prof := profile.Start(profile.ProfilePath("/tmp/"))
 	<-t.startChan
 	{ // Late initialization
@@ -2041,8 +2044,10 @@ func (t *Terminal) Loop() {
 		signal.Notify(intChan, os.Interrupt, syscall.SIGTERM)
 		go func() {
 			for s := range intChan {
-				// Don't quit by SIGINT while executing because it should be for the executing command and not for fzf itself
-				if !(s == os.Interrupt && t.executing.Get()) {
+				// Don't quit by SIGINT
+				// while executing because it should be for the executing command and not for fzf itself
+				// or if we already quit (looping == false)
+				if !(s == os.Interrupt && t.executing.Get()) && looping {
 					t.reqBox.Set(reqQuitInterrupt, nil)
 				}
 			}
@@ -2253,14 +2258,6 @@ func (t *Terminal) Loop() {
 		}()
 	}
 
-	refreshPreview := func(command string) {
-		if len(command) > 0 && t.isPreviewEnabled() {
-			_, list := t.buildPlusList(command, false)
-			t.cancelPreview()
-			t.previewBox.Set(reqPreviewEnqueue, previewRequest{command, t.pwindow, t.evaluateScrollOffset(), list})
-		}
-	}
-
 	go func() {
 		var focusedIndex int32 = minItem.Index()
 		var version int64 = -1
@@ -2277,6 +2274,8 @@ func (t *Terminal) Loop() {
 		}
 
 		for running {
+			var newSearchReq *searchRequest
+			newReqs := []util.EventType{}
 			t.reqBox.Wait(func(events *util.Events) {
 				defer events.Clear()
 				t.mutex.Lock()
@@ -2299,7 +2298,7 @@ func (t *Terminal) Loop() {
 						if focusedIndex != currentIndex || version != t.version {
 							version = t.version
 							focusedIndex = currentIndex
-							refreshPreview(t.previewOpts.command)
+							t.refreshPreview(t.previewOpts.command)
 						}
 					case reqJump:
 						if t.merger.Length() == 0 {
@@ -2310,6 +2309,15 @@ func (t *Terminal) Loop() {
 						t.printHeader()
 					case reqRefresh:
 						t.suppress = false
+					case reqLoaded:
+						l, searchReq, reqs := t.runEvent(tui.Loaded.AsEvent())
+						looping = l
+						if searchReq != nil {
+							newSearchReq = searchReq
+						}
+						for _, event := range reqs {
+							newReqs = append(newReqs, event)
+						}
 					case reqReinit:
 						t.tui.Resume(t.fullscreen, t.sigstop)
 						t.redraw(true)
@@ -2361,68 +2369,20 @@ func (t *Terminal) Loop() {
 				t.refresh()
 				t.mutex.Unlock()
 			})
+			if newSearchReq != nil {
+				t.eventBox.Set(EvtSearchNew, *newSearchReq)
+			}
+			for _, event := range newReqs {
+				t.reqBox.Set(event, nil)
+			}
 		}
 		// prof.Stop()
 		t.killPreview(code)
 	}()
 
-	looping := true
 	for looping {
-		var newCommand *string
-		changed := false
-		beof := false
-		queryChanged := false
-
 		event := t.tui.GetChar()
-
 		t.mutex.Lock()
-		previousInput := t.input
-		previousCx := t.cx
-		events := []util.EventType{}
-		req := func(evts ...util.EventType) {
-			for _, event := range evts {
-				events = append(events, event)
-				if event == reqClose || event == reqQuitInterrupt || event == reqQuitOk {
-					looping = false
-				}
-			}
-		}
-		togglePreview := func(enabled bool) bool {
-			if t.previewer.enabled != enabled {
-				t.previewer.enabled = enabled
-				// We need to immediately update t.pwindow so we don't use reqRedraw
-				t.resizeWindows()
-				req(reqPrompt, reqList, reqInfo, reqHeader)
-				return true
-			}
-			return false
-		}
-		toggle := func() bool {
-			current := t.currentItem()
-			if current != nil && t.toggleItem(current) {
-				req(reqInfo)
-				return true
-			}
-			return false
-		}
-		scrollPreviewTo := func(newOffset int) {
-			if !t.previewer.scrollable {
-				return
-			}
-			t.previewer.following = false
-			numLines := len(t.previewer.lines)
-			if t.previewOpts.cycle {
-				newOffset = (newOffset + numLines) % numLines
-			}
-			newOffset = util.Constrain(newOffset, t.previewOpts.headerLines, numLines-1)
-			if t.previewer.offset != newOffset {
-				t.previewer.offset = newOffset
-				req(reqPreviewRefresh)
-			}
-		}
-		scrollPreviewBy := func(amount int) {
-			scrollPreviewTo(t.previewer.offset + amount)
-		}
 		for key, ret := range t.expect {
 			if keyMatch(key, event) {
 				t.pressed = ret
@@ -2431,589 +2391,660 @@ func (t *Terminal) Loop() {
 				return
 			}
 		}
-
-		actionsFor := func(eventType tui.EventType) []*action {
-			return t.keymap[eventType.AsEvent()]
-		}
-
-		var doAction func(*action) bool
-		doActions := func(actions []*action) bool {
-			for _, action := range actions {
-				if !doAction(action) {
-					return false
-				}
-			}
-			return true
-		}
-		doAction = func(a *action) bool {
-			switch a.t {
-			case actIgnore:
-			case actExecute, actExecuteSilent:
-				t.executeCommand(a.a, false, a.t == actExecuteSilent)
-			case actExecuteMulti:
-				t.executeCommand(a.a, true, false)
-			case actExecuteAndExitOnSuccess:
-				if t.executeCommand(a.a, false, false) == nil {
-					req(reqQuitOk)
-				}
-			case actInvalid:
-				t.mutex.Unlock()
-				return false
-			case actTogglePreview:
-				if t.hasPreviewer() {
-					togglePreview(!t.previewer.enabled)
-					if t.previewer.enabled {
-						valid, list := t.buildPlusList(t.previewOpts.command, false)
-						if valid {
-							t.cancelPreview()
-							t.previewBox.Set(reqPreviewEnqueue,
-								previewRequest{t.previewOpts.command, t.pwindow, t.evaluateScrollOffset(), list})
-						}
-					}
-				}
-			case actTogglePreviewFocus:
-				if t.hasPreviewer() && t.previewer.enabled {
-					t.focusPreview = !t.focusPreview
-					req(reqInfo)
-				}
-			case actTogglePreviewWrap:
-				if t.hasPreviewWindow() {
-					t.previewOpts.wrap = !t.previewOpts.wrap
-					// Reset preview version so that full redraw occurs
-					t.previewed.version = 0
-					req(reqPreviewRefresh)
-				}
-			case actToggleSort:
-				t.sort = !t.sort
-				changed = true
-			case actPreviewTop:
-				if t.hasPreviewWindow() {
-					scrollPreviewTo(0)
-				}
-			case actPreviewBottom:
-				if t.hasPreviewWindow() {
-					scrollPreviewTo(len(t.previewer.lines) - t.pwindow.Height())
-				}
-			case actPreviewUp:
-				if t.hasPreviewWindow() {
-					scrollPreviewBy(-1)
-				}
-			case actPreviewDown:
-				if t.hasPreviewWindow() {
-					scrollPreviewBy(1)
-				}
-			case actPreviewPageUp:
-				if t.hasPreviewWindow() {
-					scrollPreviewBy(-t.pwindow.Height())
-				}
-			case actPreviewPageDown:
-				if t.hasPreviewWindow() {
-					scrollPreviewBy(t.pwindow.Height())
-				}
-			case actPreviewHalfPageUp:
-				if t.hasPreviewWindow() {
-					scrollPreviewBy(-t.pwindow.Height() / 2)
-				}
-			case actPreviewHalfPageDown:
-				if t.hasPreviewWindow() {
-					scrollPreviewBy(t.pwindow.Height() / 2)
-				}
-			case actBeginningOfLine:
-				t.cx = 0
-			case actBackwardChar:
-				if t.cx > 0 {
-					t.cx--
-				}
-			case actPrintQuery:
-				req(reqPrintQuery)
-			case actChangePrompt:
-				t.prompt, t.promptLen = t.parsePrompt(a.a)
-				t.useDefaultPrompt = false
-				req(reqPrompt)
-			case actTogglePrompt:
-				if t.useDefaultPrompt {
-					t.prompt, t.promptLen = t.parsePrompt(a.a)
-				} else {
-					t.prompt, t.promptLen = t.defaultPrompt, t.defaultPromptLen
-				}
-				t.useDefaultPrompt = !t.useDefaultPrompt
-				req(reqPrompt)
-			case actDefaultPrompt:
-				t.prompt, t.promptLen = t.defaultPrompt, t.defaultPromptLen
-				t.useDefaultPrompt = true
-				req(reqPrompt)
-			case actPreview:
-				togglePreview(true)
-				refreshPreview(a.a)
-			case actRefreshPreview:
-				refreshPreview(t.previewOpts.command)
-			case actReplaceQuery:
-				current := t.currentItem()
-				if current != nil {
-					t.input = current.text.ToRunes()
-					t.cx = len(t.input)
-				}
-			case actAbort:
-				req(reqQuitInterrupt)
-			case actDeleteChar:
-				t.delChar()
-			case actDeleteCharEOF:
-				if !t.delChar() && t.cx == 0 {
-					req(reqQuitInterrupt)
-				}
-			case actEndOfLine:
-				t.cx = len(t.input)
-			case actCancel:
-				if len(t.input) == 0 {
-					req(reqQuitInterrupt)
-				} else {
-					t.yanked = t.input
-					t.input = []rune{}
-					t.cx = 0
-				}
-			case actBackwardDeleteCharEOF:
-				if len(t.input) == 0 {
-					req(reqQuitInterrupt)
-				} else if t.cx > 0 {
-					t.input = append(t.input[:t.cx-1], t.input[t.cx:]...)
-					t.cx--
-				}
-			case actForwardChar:
-				if t.cx < len(t.input) {
-					t.cx++
-				}
-			case actBackwardDeleteChar:
-				beof = len(t.input) == 0
-				if t.cx > 0 {
-					t.input = append(t.input[:t.cx-1], t.input[t.cx:]...)
-					t.cx--
-				}
-			case actSelectAll:
-				if t.multi > 0 {
-					for i := 0; i < t.merger.Length(); i++ {
-						if !t.selectItem(t.merger.Get(i).item) {
-							break
-						}
-					}
-					req(reqList, reqInfo)
-				}
-			case actDeselectAll:
-				if t.multi > 0 {
-					for i := 0; i < t.merger.Length() && len(t.selected) > 0; i++ {
-						t.deselectItem(t.merger.Get(i).item)
-					}
-					req(reqList, reqInfo)
-				}
-			case actClose:
-				if t.isPreviewEnabled() {
-					togglePreview(false)
-				} else {
-					req(reqQuitInterrupt)
-				}
-			case actSelect:
-				current := t.currentItem()
-				if t.multi > 0 && current != nil && t.selectItemChanged(current) {
-					req(reqList, reqInfo)
-				}
-			case actDeselect:
-				current := t.currentItem()
-				if t.multi > 0 && current != nil && t.deselectItemChanged(current) {
-					req(reqList, reqInfo)
-				}
-			case actToggle:
-				if t.multi > 0 && t.merger.Length() > 0 && toggle() {
-					req(reqList)
-				}
-			case actToggleAll:
-				if t.multi > 0 {
-					prevIndexes := make(map[int]struct{})
-					for i := 0; i < t.merger.Length() && len(t.selected) > 0; i++ {
-						item := t.merger.Get(i).item
-						if _, found := t.selected[item.Index()]; found {
-							prevIndexes[i] = struct{}{}
-							t.deselectItem(item)
-						}
-					}
-
-					for i := 0; i < t.merger.Length(); i++ {
-						if _, found := prevIndexes[i]; !found {
-							item := t.merger.Get(i).item
-							if !t.selectItem(item) {
-								break
-							}
-						}
-					}
-					req(reqList, reqInfo)
-				}
-			case actToggleIn:
-				if t.layout != layoutDefault {
-					return doAction(&action{t: actToggleUp})
-				}
-				return doAction(&action{t: actToggleDown})
-			case actToggleOut:
-				if t.layout != layoutDefault {
-					return doAction(&action{t: actToggleDown})
-				}
-				return doAction(&action{t: actToggleUp})
-			case actToggleDown:
-				if t.multi > 0 && t.merger.Length() > 0 && toggle() {
-					t.vmove(-1, true)
-					req(reqList, reqInfo)
-				}
-			case actToggleUp:
-				if t.multi > 0 && t.merger.Length() > 0 && toggle() {
-					t.vmove(1, true)
-					req(reqList, reqInfo)
-				}
-			case actDown:
-				if t.hasPreviewWindow() && t.focusPreview {
-					scrollPreviewBy(1)
-				} else {
-					t.vmove(-1, true)
-					req(reqList, reqInfo)
-				}
-			case actUp:
-				if t.hasPreviewWindow() && t.focusPreview {
-					scrollPreviewBy(-1)
-				} else {
-					t.vmove(1, true)
-					req(reqList, reqInfo)
-				}
-			case actAccept:
-				req(reqClose)
-			case actAcceptNonEmpty:
-				if len(t.selected) > 0 || t.merger.Length() > 0 || !t.reading && t.count == 0 {
-					req(reqClose)
-				}
-			case actClearScreen:
-				req(reqFullRedraw)
-			case actClearQuery:
-				t.input = []rune{}
-				t.cx = 0
-			case actClearSelection:
-				if t.multi > 0 {
-					t.selected = make(map[int32]selectedItem)
-					t.version++
-					req(reqList, reqInfo)
-				}
-			case actFirst:
-				t.vset(0)
-				req(reqList, reqInfo)
-			case actLast:
-				t.vset(t.merger.Length() - 1)
-				req(reqList, reqInfo)
-			case actUnixLineDiscard:
-				beof = len(t.input) == 0
-				if t.cx > 0 {
-					t.yanked = copySlice(t.input[:t.cx])
-					t.input = t.input[t.cx:]
-					t.cx = 0
-				}
-			case actUnixWordRubout:
-				beof = len(t.input) == 0
-				if t.cx > 0 {
-					t.rubout("\\s\\S")
-				}
-			case actBackwardKillWord:
-				beof = len(t.input) == 0
-				if t.cx > 0 {
-					t.rubout(t.wordRubout)
-				}
-			case actYank:
-				suffix := copySlice(t.input[t.cx:])
-				t.input = append(append(t.input[:t.cx], t.yanked...), suffix...)
-				t.cx += len(t.yanked)
-			case actPageUp:
-				if t.hasPreviewWindow() && t.focusPreview {
-					scrollPreviewBy(-t.pwindow.Height())
-				} else {
-					prevOffset := t.offset
-					t.offset = util.Constrain(t.offset - t.maxItems(), 0, util.Max(t.merger.Length() - t.maxItems(), 0))
-					if prevOffset == t.offset {
-						t.vset(0)
-					} else {
-	//					t.vmove(prevOffset - t.offset, false)
-						t.vset(t.offset + t.maxItems() - 1)
-					}
-					req(reqList, reqInfo)
-				}
-			case actPageDown:
-				if t.hasPreviewWindow() && t.focusPreview {
-					scrollPreviewBy(t.pwindow.Height())
-				} else {
-					prevOffset := t.offset
-					t.offset = util.Constrain(t.offset + t.maxItems(), 0, util.Max(t.merger.Length() - t.maxItems(), 0))
-					if prevOffset == t.offset {
-						t.vset(t.merger.Length())
-					} else {
-	//					t.vmove(prevOffset - t.offset, false)
-						t.vset(t.offset)
-					}
-					req(reqList, reqInfo)
-				}
-			case actHalfPageUp:
-				t.vmove(t.maxItems()/2, false)
-				req(reqList, reqInfo)
-			case actHalfPageDown:
-				t.vmove(-(t.maxItems() / 2), false)
-				req(reqList, reqInfo)
-			case actJump:
-				t.jumping = jumpEnabled
-				req(reqJump)
-			case actJumpAccept:
-				t.jumping = jumpAcceptEnabled
-				req(reqJump)
-			case actBackwardWord:
-				t.cx = findLastMatch(t.wordRubout, string(t.input[:t.cx])) + 1
-			case actForwardWord:
-				t.cx += findFirstMatch(t.wordNext, string(t.input[t.cx:])) + 1
-			case actKillWord:
-				ncx := t.cx +
-					findFirstMatch(t.wordNext, string(t.input[t.cx:])) + 1
-				if ncx > t.cx {
-					t.yanked = copySlice(t.input[t.cx:ncx])
-					t.input = append(t.input[:t.cx], t.input[ncx:]...)
-				}
-			case actKillLine:
-				if t.cx < len(t.input) {
-					t.yanked = copySlice(t.input[t.cx:])
-					t.input = t.input[:t.cx]
-				}
-			case actRune:
-				prefix := copySlice(t.input[:t.cx])
-				t.input = append(append(prefix, event.Char), t.input[t.cx:]...)
-				t.cx++
-			case actPreviousHistory:
-				if t.history != nil {
-					t.history.override(string(t.input))
-					t.input = trimQuery(t.history.previous())
-					t.cx = len(t.input)
-				}
-			case actNextHistory:
-				if t.history != nil {
-					t.history.override(string(t.input))
-					t.input = trimQuery(t.history.next())
-					t.cx = len(t.input)
-				}
-			case actToggleSearch:
-				t.paused = !t.paused
-				changed = !t.paused
-				req(reqPrompt)
-			case actEnableSearch:
-				t.paused = false
-				changed = true
-				req(reqPrompt)
-			case actDisableSearch:
-				t.paused = true
-				req(reqPrompt)
-			case actSigStop:
-				p, err := os.FindProcess(os.Getpid())
-				if err == nil {
-					t.sigstop = true
-					t.tui.Clear()
-					t.tui.Pause(t.fullscreen)
-					notifyStop(p)
-					t.mutex.Unlock()
-					return false
-				}
-			case actMouse:
-				me := event.MouseEvent
-				mx, my := me.X, me.Y
-				if me.S != 0 {
-					// Scroll
-					if t.window.Enclose(my, mx) && t.merger.Length() > 0 {
-						if t.multi > 0 && me.Mod {
-							toggle()
-						}
-						t.vmove(me.S, true)
-						req(reqList, reqInfo)
-					} else if t.hasPreviewWindow() && t.pwindow.Enclose(my, mx) {
-						scrollPreviewBy(-me.S)
-					}
-				} else if t.window.Enclose(my, mx) {
-					mx -= t.window.Left()
-					my -= t.window.Top()
-					mx = util.Constrain(mx-t.promptLen, 0, len(t.input))
-					min := 2 + len(t.header)
-					if t.noInfoLine() {
-						min--
-					}
-					h := t.window.Height()
-					switch t.layout {
-					case layoutDefault:
-						my = h - my - 1
-					case layoutReverseList:
-						if my < h-min {
-							my += min
-						} else {
-							my = h - my - 1
-						}
-					}
-					if me.Double {
-						// Double-click
-						if my >= min {
-							if t.vset(t.offset+my-min) && t.cy < t.merger.Length() {
-								return doActions(actionsFor(tui.DoubleClick))
-							}
-						}
-					} else if me.Down {
-						if my == t.promptLine() && mx >= 0 {
-							// Prompt
-							t.cx = mx + t.xoffset
-						} else if my >= min {
-							// List
-							if t.vset(t.offset+my-min) && t.multi > 0 && me.Mod {
-								toggle()
-							}
-							req(reqList, reqInfo)
-							if me.Left {
-								return doActions(actionsFor(tui.LeftClick))
-							}
-							return doActions(actionsFor(tui.RightClick))
-						}
-					}
-				}
-			case actReload:
-				if !t.reloadEnabled {
-					break
-				}
-				t.failed = nil
-
-				valid, list := t.buildPlusList(a.a, false)
-				if !valid {
-					// We run the command even when there's no match
-					// 1. If the template doesn't have any slots
-					// 2. If the template has {q}
-					slot, _, query := hasPreviewFlags(a.a)
-					valid = !slot || query
-				}
-				if valid {
-					command := t.replacePlaceholder(a.a, false, string(t.input), list)
-					newCommand = &command
-					t.reading = true
-				}
-			case actUnbind:
-				keys := parseKeyChords(a.a, "PANIC")
-				for key := range keys {
-					delete(t.keymap, key)
-				}
-			case actRebind:
-				keys := parseKeyChords(a.a, "PANIC")
-				for key := range keys {
-					if originalAction, found := t.keymapOrg[key]; found {
-						t.keymap[key] = originalAction
-					}
-				}
-			case actChangePreview:
-				if t.previewOpts.command != a.a {
-					togglePreview(len(a.a) > 0)
-					t.previewOpts.command = a.a
-					refreshPreview(t.previewOpts.command)
-				}
-			case actChangePreviewWindow:
-				currentPreviewOpts := t.previewOpts
-
-				// Reset preview options and apply the additional options
-				t.previewOpts = t.initialPreviewOpts
-
-				// Split window options
-				tokens := strings.Split(a.a, "|")
-				parsePreviewWindow(&t.previewOpts, tokens[0])
-				if len(tokens) > 1 {
-					a.a = strings.Join(append(tokens[1:], tokens[0]), "|")
-				}
-
-				if t.previewOpts.hidden {
-					togglePreview(false)
-				} else {
-					// Full redraw
-					if !currentPreviewOpts.sameLayout(t.previewOpts) {
-						if togglePreview(true) {
-							refreshPreview(t.previewOpts.command)
-						} else {
-							req(reqRedraw)
-						}
-					} else if !currentPreviewOpts.sameContentLayout(t.previewOpts) {
-						t.previewed.version = 0
-						req(reqPreviewRefresh)
-					}
-
-					// Adjust scroll offset
-					if t.hasPreviewWindow() && currentPreviewOpts.scroll != t.previewOpts.scroll {
-						scrollPreviewTo(t.evaluateScrollOffset())
-					}
-				}
-			case actEnableReload:
-				t.reloadEnabled = true
-			case actDisableReload:
-				t.reloadEnabled = true
-			case actToggleReload:
-				t.reloadEnabled = !t.reloadEnabled
-			case actGoTo:
-				i, err := strconv.Atoi(a.a)
-				if err == nil {
-					t.vset(i)
-					req(reqList, reqInfo)
-				}
-			}
-			return true
-		}
-
-		if t.jumping == jumpDisabled {
-			actions := t.keymap[event.Comparable()]
-			if len(actions) == 0 && event.Type == tui.Rune {
-				doAction(&action{t: actRune})
-			} else if !doActions(actions) {
-				continue
-			}
-			t.truncateQuery()
-			queryChanged = string(previousInput) != string(t.input)
-			changed = changed || queryChanged
-			if onChanges, prs := t.keymap[tui.Change.AsEvent()]; queryChanged && prs {
-				if !doActions(onChanges) {
-					continue
-				}
-			}
-			if onEOFs, prs := t.keymap[tui.BackwardEOF.AsEvent()]; beof && prs {
-				if !doActions(onEOFs) {
-					continue
-				}
-			}
-		} else {
-			if event.Type == tui.Rune {
-				if idx := strings.IndexRune(t.jumpLabels, event.Char); idx >= 0 && idx < t.maxItems() && idx < t.merger.Length() {
-					t.cy = idx + t.offset
-					if t.jumping == jumpAcceptEnabled {
-						req(reqClose)
-					}
-				}
-			}
-			t.jumping = jumpDisabled
-			req(reqList, reqInfo)
-		}
-
-		if queryChanged {
-			if t.isPreviewEnabled() {
-				_, _, q := hasPreviewFlags(t.previewOpts.command)
-				if q {
-					t.version++
-				}
-			}
-		}
-
-		if queryChanged || t.cx != previousCx {
-			req(reqPrompt)
-		}
+		l, searchReq, events := t.runEvent(event)
+		looping = l
 
 		t.mutex.Unlock() // Must be unlocked before touching reqBox
-
-		if changed || newCommand != nil {
-			t.eventBox.Set(EvtSearchNew, searchRequest{sort: t.sort, command: newCommand})
+		if searchReq != nil {
+			t.eventBox.Set(EvtSearchNew, *searchReq)
 		}
 		for _, event := range events {
 			t.reqBox.Set(event, nil)
 		}
 	}
+}
+
+func (t *Terminal) refreshPreview(command string) {
+	if len(command) > 0 && t.isPreviewEnabled() {
+		_, list := t.buildPlusList(command, false)
+		t.cancelPreview()
+		t.previewBox.Set(reqPreviewEnqueue, previewRequest{command, t.pwindow, t.evaluateScrollOffset(), list})
+	}
+}
+
+func (t *Terminal) runEvent(event tui.Event) (looping bool, searchReq *searchRequest, events []util.EventType) {
+	looping = true
+	searchReq = nil
+	events = []util.EventType{}
+
+	var newCommand *string
+	changed := false
+	beof := false
+	queryChanged := false
+
+	previousInput := t.input
+	previousCx := t.cx
+	req := func(evts ...util.EventType) {
+		for _, event := range evts {
+			events = append(events, event)
+			if event == reqClose || event == reqQuitInterrupt || event == reqQuitOk {
+				looping = false
+			}
+		}
+	}
+	togglePreview := func(enabled bool) bool {
+		if t.previewer.enabled != enabled {
+			t.previewer.enabled = enabled
+			// We need to immediately update t.pwindow so we don't use reqRedraw
+			t.resizeWindows()
+			req(reqPrompt, reqList, reqInfo, reqHeader)
+			return true
+		}
+		return false
+	}
+	toggle := func() bool {
+		current := t.currentItem()
+		if current != nil && t.toggleItem(current) {
+			req(reqInfo)
+			return true
+		}
+		return false
+	}
+	scrollPreviewTo := func(newOffset int) {
+		if !t.previewer.scrollable {
+			return
+		}
+		t.previewer.following = false
+		numLines := len(t.previewer.lines)
+		if t.previewOpts.cycle {
+			newOffset = (newOffset + numLines) % numLines
+		}
+		newOffset = util.Constrain(newOffset, t.previewOpts.headerLines, numLines-1)
+		if t.previewer.offset != newOffset {
+			t.previewer.offset = newOffset
+			req(reqPreviewRefresh)
+		}
+	}
+	scrollPreviewBy := func(amount int) {
+		scrollPreviewTo(t.previewer.offset + amount)
+	}
+
+	actionsFor := func(eventType tui.EventType) []*action {
+		return t.keymap[eventType.AsEvent()]
+	}
+
+		var doAction func(*action) bool
+	doActions := func(actions []*action) bool {
+		for _, action := range actions {
+			if !doAction(action) {
+				return false
+			}
+		}
+		return true
+	}
+	doAction = func(a *action) bool {
+		switch a.t {
+		case actIgnore:
+		case actExecute, actExecuteSilent:
+			t.executeCommand(a.a, false, a.t == actExecuteSilent)
+		case actExecuteMulti:
+			t.executeCommand(a.a, true, false)
+		case actExecuteAndExitOnSuccess:
+			if t.executeCommand(a.a, false, false) == nil {
+				req(reqQuitOk)
+			}
+		case actInvalid:
+			t.mutex.Unlock()
+			return false
+		case actTogglePreview:
+			if t.hasPreviewer() {
+				togglePreview(!t.previewer.enabled)
+				if t.previewer.enabled {
+					valid, list := t.buildPlusList(t.previewOpts.command, false)
+					if valid {
+						t.cancelPreview()
+						t.previewBox.Set(reqPreviewEnqueue,
+							previewRequest{t.previewOpts.command, t.pwindow, t.evaluateScrollOffset(), list})
+					}
+				}
+			}
+		case actTogglePreviewFocus:
+			if t.hasPreviewer() && t.previewer.enabled {
+				t.focusPreview = !t.focusPreview
+				req(reqInfo)
+			}
+		case actTogglePreviewWrap:
+			if t.hasPreviewWindow() {
+				t.previewOpts.wrap = !t.previewOpts.wrap
+				// Reset preview version so that full redraw occurs
+				t.previewed.version = 0
+				req(reqPreviewRefresh)
+			}
+		case actToggleSort:
+			t.sort = !t.sort
+			changed = true
+		case actPreviewTop:
+			if t.hasPreviewWindow() {
+				scrollPreviewTo(0)
+			}
+		case actPreviewBottom:
+			if t.hasPreviewWindow() {
+				scrollPreviewTo(len(t.previewer.lines) - t.pwindow.Height())
+			}
+		case actPreviewUp:
+			if t.hasPreviewWindow() {
+				scrollPreviewBy(-1)
+			}
+		case actPreviewDown:
+			if t.hasPreviewWindow() {
+				scrollPreviewBy(1)
+			}
+		case actPreviewPageUp:
+			if t.hasPreviewWindow() {
+				scrollPreviewBy(-t.pwindow.Height())
+			}
+		case actPreviewPageDown:
+			if t.hasPreviewWindow() {
+				scrollPreviewBy(t.pwindow.Height())
+			}
+		case actPreviewHalfPageUp:
+			if t.hasPreviewWindow() {
+				scrollPreviewBy(-t.pwindow.Height() / 2)
+			}
+		case actPreviewHalfPageDown:
+			if t.hasPreviewWindow() {
+				scrollPreviewBy(t.pwindow.Height() / 2)
+			}
+		case actBeginningOfLine:
+			t.cx = 0
+		case actBackwardChar:
+			if t.cx > 0 {
+				t.cx--
+			}
+		case actPrintQuery:
+			req(reqPrintQuery)
+		case actChangePrompt:
+			t.prompt, t.promptLen = t.parsePrompt(a.a)
+			t.useDefaultPrompt = false
+			req(reqPrompt)
+		case actTogglePrompt:
+			if t.useDefaultPrompt {
+				t.prompt, t.promptLen = t.parsePrompt(a.a)
+			} else {
+				t.prompt, t.promptLen = t.defaultPrompt, t.defaultPromptLen
+			}
+			t.useDefaultPrompt = !t.useDefaultPrompt
+			req(reqPrompt)
+		case actDefaultPrompt:
+			t.prompt, t.promptLen = t.defaultPrompt, t.defaultPromptLen
+			t.useDefaultPrompt = true
+			req(reqPrompt)
+		case actPreview:
+			togglePreview(true)
+			t.refreshPreview(a.a)
+		case actRefreshPreview:
+			t.refreshPreview(t.previewOpts.command)
+		case actReplaceQuery:
+		current := t.currentItem()
+			if current != nil {
+				t.input = current.text.ToRunes()
+				t.cx = len(t.input)
+			}
+		case actAbort:
+			req(reqQuitInterrupt)
+		case actDeleteChar:
+			t.delChar()
+		case actDeleteCharEOF:
+			if !t.delChar() && t.cx == 0 {
+				req(reqQuitInterrupt)
+			}
+		case actEndOfLine:
+			t.cx = len(t.input)
+		case actCancel:
+			if len(t.input) == 0 {
+				req(reqQuitInterrupt)
+			} else {
+				t.yanked = t.input
+				t.input = []rune{}
+				t.cx = 0
+			}
+		case actBackwardDeleteCharEOF:
+			if len(t.input) == 0 {
+				req(reqQuitInterrupt)
+			} else if t.cx > 0 {
+				t.input = append(t.input[:t.cx-1], t.input[t.cx:]...)
+				t.cx--
+			}
+		case actForwardChar:
+			if t.cx < len(t.input) {
+				t.cx++
+			}
+		case actBackwardDeleteChar:
+			beof = len(t.input) == 0
+			if t.cx > 0 {
+				t.input = append(t.input[:t.cx-1], t.input[t.cx:]...)
+				t.cx--
+			}
+		case actSelectAll:
+			if t.multi > 0 {
+				for i := 0; i < t.merger.Length(); i++ {
+					if !t.selectItem(t.merger.Get(i).item) {
+						break
+					}
+				}
+				req(reqList, reqInfo)
+			}
+		case actDeselectAll:
+			if t.multi > 0 {
+				for i := 0; i < t.merger.Length() && len(t.selected) > 0; i++ {
+					t.deselectItem(t.merger.Get(i).item)
+				}
+				req(reqList, reqInfo)
+			}
+		case actClose:
+			if t.isPreviewEnabled() {
+				togglePreview(false)
+			} else {
+				req(reqQuitInterrupt)
+			}
+		case actSelect:
+			current := t.currentItem()
+			if t.multi > 0 && current != nil && t.selectItemChanged(current) {
+				req(reqList, reqInfo)
+			}
+		case actDeselect:
+			current := t.currentItem()
+			if t.multi > 0 && current != nil && t.deselectItemChanged(current) {
+				req(reqList, reqInfo)
+			}
+		case actToggle:
+			if t.multi > 0 && t.merger.Length() > 0 && toggle() {
+				req(reqList)
+			}
+		case actToggleAll:
+			if t.multi > 0 {
+				prevIndexes := make(map[int]struct{})
+				for i := 0; i < t.merger.Length() && len(t.selected) > 0; i++ {
+					item := t.merger.Get(i).item
+					if _, found := t.selected[item.Index()]; found {
+						prevIndexes[i] = struct{}{}
+						t.deselectItem(item)
+					}
+				}
+
+					for i := 0; i < t.merger.Length(); i++ {
+					if _, found := prevIndexes[i]; !found {
+						item := t.merger.Get(i).item
+						if !t.selectItem(item) {
+							break
+						}
+					}
+				}
+				req(reqList, reqInfo)
+			}
+		case actToggleIn:
+			if t.layout != layoutDefault {
+				return doAction(&action{t: actToggleUp})
+			}
+			return doAction(&action{t: actToggleDown})
+		case actToggleOut:
+			if t.layout != layoutDefault {
+				return doAction(&action{t: actToggleDown})
+			}
+			return doAction(&action{t: actToggleUp})
+		case actToggleDown:
+			if t.multi > 0 && t.merger.Length() > 0 && toggle() {
+				t.vmove(-1, true)
+				req(reqList, reqInfo)
+			}
+		case actToggleUp:
+			if t.multi > 0 && t.merger.Length() > 0 && toggle() {
+				t.vmove(1, true)
+				req(reqList, reqInfo)
+			}
+		case actDown:
+			if t.hasPreviewWindow() && t.focusPreview {
+				scrollPreviewBy(1)
+			} else {
+				t.vmove(-1, true)
+				req(reqList, reqInfo)
+			}
+		case actUp:
+			if t.hasPreviewWindow() && t.focusPreview {
+				scrollPreviewBy(-1)
+		} else {
+				t.vmove(1, true)
+				req(reqList, reqInfo)
+			}
+		case actAccept:
+			req(reqClose)
+		case actAcceptNonEmpty:
+			if len(t.selected) > 0 || t.merger.Length() > 0 || !t.reading && t.count == 0 {
+				req(reqClose)
+			}
+		case actClearScreen:
+			req(reqFullRedraw)
+		case actClearQuery:
+			t.input = []rune{}
+			t.cx = 0
+		case actClearSelection:
+			if t.multi > 0 {
+				t.selected = make(map[int32]selectedItem)
+				t.version++
+				req(reqList, reqInfo)
+			}
+		case actFirst:
+			t.vset(0)
+			req(reqList, reqInfo)
+		case actLast:
+			t.vset(t.merger.Length() - 1)
+			req(reqList, reqInfo)
+		case actUnixLineDiscard:
+			beof = len(t.input) == 0
+			if t.cx > 0 {
+				t.yanked = copySlice(t.input[:t.cx])
+				t.input = t.input[t.cx:]
+				t.cx = 0
+			}
+		case actUnixWordRubout:
+			beof = len(t.input) == 0
+			if t.cx > 0 {
+				t.rubout("\\s\\S")
+			}
+		case actBackwardKillWord:
+			beof = len(t.input) == 0
+			if t.cx > 0 {
+				t.rubout(t.wordRubout)
+			}
+		case actYank:
+			suffix := copySlice(t.input[t.cx:])
+			t.input = append(append(t.input[:t.cx], t.yanked...), suffix...)
+			t.cx += len(t.yanked)
+		case actPageUp:
+			if t.hasPreviewWindow() && t.focusPreview {
+				scrollPreviewBy(-t.pwindow.Height())
+			} else {
+				prevOffset := t.offset
+				t.offset = util.Constrain(t.offset - t.maxItems(), 0, util.Max(t.merger.Length() - t.maxItems(), 0))
+				if prevOffset == t.offset {
+					t.vset(0)
+				} else {
+	//					t.vmove(prevOffset - t.offset, false)
+					t.vset(t.offset + t.maxItems() - 1)
+				}
+				req(reqList, reqInfo)
+			}
+		case actPageDown:
+			if t.hasPreviewWindow() && t.focusPreview {
+				scrollPreviewBy(t.pwindow.Height())
+			} else {
+				prevOffset := t.offset
+				t.offset = util.Constrain(t.offset + t.maxItems(), 0, util.Max(t.merger.Length() - t.maxItems(), 0))
+				if prevOffset == t.offset {
+					t.vset(t.merger.Length())
+				} else {
+//					t.vmove(prevOffset - t.offset, false)
+					t.vset(t.offset)
+				}
+				req(reqList, reqInfo)
+			}
+		case actHalfPageUp:
+			t.vmove(t.maxItems()/2, false)
+			req(reqList, reqInfo)
+		case actHalfPageDown:
+			t.vmove(-(t.maxItems() / 2), false)
+			req(reqList, reqInfo)
+		case actJump:
+			t.jumping = jumpEnabled
+			req(reqJump)
+		case actJumpAccept:
+			t.jumping = jumpAcceptEnabled
+			req(reqJump)
+		case actBackwardWord:
+			t.cx = findLastMatch(t.wordRubout, string(t.input[:t.cx])) + 1
+		case actForwardWord:
+			t.cx += findFirstMatch(t.wordNext, string(t.input[t.cx:])) + 1
+		case actKillWord:
+			ncx := t.cx +
+				findFirstMatch(t.wordNext, string(t.input[t.cx:])) + 1
+			if ncx > t.cx {
+				t.yanked = copySlice(t.input[t.cx:ncx])
+				t.input = append(t.input[:t.cx], t.input[ncx:]...)
+			}
+		case actKillLine:
+			if t.cx < len(t.input) {
+				t.yanked = copySlice(t.input[t.cx:])
+				t.input = t.input[:t.cx]
+			}
+		case actRune:
+			prefix := copySlice(t.input[:t.cx])
+			t.input = append(append(prefix, event.Char), t.input[t.cx:]...)
+			t.cx++
+		case actPreviousHistory:
+			if t.history != nil {
+				t.history.override(string(t.input))
+				t.input = trimQuery(t.history.previous())
+				t.cx = len(t.input)
+			}
+		case actNextHistory:
+			if t.history != nil {
+				t.history.override(string(t.input))
+				t.input = trimQuery(t.history.next())
+				t.cx = len(t.input)
+			}
+		case actToggleSearch:
+			t.paused = !t.paused
+			changed = !t.paused
+			req(reqPrompt)
+		case actEnableSearch:
+			t.paused = false
+			changed = true
+			req(reqPrompt)
+		case actDisableSearch:
+			t.paused = true
+			req(reqPrompt)
+		case actSigStop:
+			p, err := os.FindProcess(os.Getpid())
+			if err == nil {
+				t.sigstop = true
+				t.tui.Clear()
+				t.tui.Pause(t.fullscreen)
+				notifyStop(p)
+				t.mutex.Unlock()
+				return false
+		}
+		case actMouse:
+			me := event.MouseEvent
+			mx, my := me.X, me.Y
+			if me.S != 0 {
+				// Scroll
+				if t.window.Enclose(my, mx) && t.merger.Length() > 0 {
+					if t.multi > 0 && me.Mod {
+						toggle()
+					}
+					t.vmove(me.S, true)
+					req(reqList, reqInfo)
+				} else if t.hasPreviewWindow() && t.pwindow.Enclose(my, mx) {
+					scrollPreviewBy(-me.S)
+				}
+			} else if t.window.Enclose(my, mx) {
+				mx -= t.window.Left()
+				my -= t.window.Top()
+				mx = util.Constrain(mx-t.promptLen, 0, len(t.input))
+				min := 2 + len(t.header)
+				if t.noInfoLine() {
+					min--
+				}
+				h := t.window.Height()
+				switch t.layout {
+				case layoutDefault:
+					my = h - my - 1
+				case layoutReverseList:
+					if my < h-min {
+						my += min
+					} else {
+						my = h - my - 1
+					}
+				}
+				if me.Double {
+					// Double-click
+					if my >= min {
+						if t.vset(t.offset+my-min) && t.cy < t.merger.Length() {
+							return doActions(actionsFor(tui.DoubleClick))
+						}
+					}
+				} else if me.Down {
+					if my == t.promptLine() && mx >= 0 {
+						// Prompt
+						t.cx = mx + t.xoffset
+					} else if my >= min {
+						// List
+						if t.vset(t.offset+my-min) && t.multi > 0 && me.Mod {
+							toggle()
+						}
+						req(reqList, reqInfo)
+						if me.Left {
+							return doActions(actionsFor(tui.LeftClick))
+						}
+						return doActions(actionsFor(tui.RightClick))
+					}
+				}
+			}
+		case actReload:
+			if !t.reloadEnabled {
+				break
+			}
+			t.failed = nil
+
+			valid, list := t.buildPlusList(a.a, false)
+			if !valid {
+				// We run the command even when there's no match
+				// 1. If the template doesn't have any slots
+				// 2. If the template has {q}
+				slot, _, query := hasPreviewFlags(a.a)
+				valid = !slot || query
+			}
+			if valid {
+				command := t.replacePlaceholder(a.a, false, string(t.input), list)
+				newCommand = &command
+				t.reading = true
+			}
+		case actUnbind:
+			keys := parseKeyChords(a.a, "PANIC")
+			for key := range keys {
+				delete(t.keymap, key)
+			}
+		case actRebind:
+			keys := parseKeyChords(a.a, "PANIC")
+			for key := range keys {
+				if originalAction, found := t.keymapOrg[key]; found {
+					t.keymap[key] = originalAction
+				}
+			}
+		case actChangePreview:
+			if t.previewOpts.command != a.a {
+				togglePreview(len(a.a) > 0)
+				t.previewOpts.command = a.a
+				t.refreshPreview(t.previewOpts.command)
+			}
+		case actChangePreviewWindow:
+			currentPreviewOpts := t.previewOpts
+
+			// Reset preview options and apply the additional options
+			t.previewOpts = t.initialPreviewOpts
+
+			// Split window options
+			tokens := strings.Split(a.a, "|")
+			parsePreviewWindow(&t.previewOpts, tokens[0])
+			if len(tokens) > 1 {
+				a.a = strings.Join(append(tokens[1:], tokens[0]), "|")
+			}
+
+			if t.previewOpts.hidden {
+				togglePreview(false)
+			} else {
+				// Full redraw
+				if !currentPreviewOpts.sameLayout(t.previewOpts) {
+					if togglePreview(true) {
+						t.refreshPreview(t.previewOpts.command)
+					} else {
+						req(reqRedraw)
+					}
+				} else if !currentPreviewOpts.sameContentLayout(t.previewOpts) {
+					t.previewed.version = 0
+					req(reqPreviewRefresh)
+				}
+
+				// Adjust scroll offset
+				if t.hasPreviewWindow() && currentPreviewOpts.scroll != t.previewOpts.scroll {
+					scrollPreviewTo(t.evaluateScrollOffset())
+				}
+			}
+		case actEnableReload:
+			t.reloadEnabled = true
+		case actDisableReload:
+			t.reloadEnabled = true
+		case actToggleReload:
+			t.reloadEnabled = !t.reloadEnabled
+		case actGoTo:
+			i, err := strconv.Atoi(a.a)
+			if err == nil {
+				t.vset(i)
+				req(reqList, reqInfo)
+			}
+		}
+		return true
+	}
+
+	if t.jumping == jumpDisabled {
+		actions := t.keymap[event.Comparable()]
+		if len(actions) == 0 && event.Type == tui.Rune {
+			doAction(&action{t: actRune})
+		} else if !doActions(actions) {
+			return
+		}
+		t.truncateQuery()
+		queryChanged = string(previousInput) != string(t.input)
+		changed = changed || queryChanged
+		if onChanges, prs := t.keymap[tui.Change.AsEvent()]; queryChanged && prs {
+			if !doActions(onChanges) {
+				return
+			}
+		}
+		if onEOFs, prs := t.keymap[tui.BackwardEOF.AsEvent()]; beof && prs {
+			if !doActions(onEOFs) {
+				return
+			}
+		}
+	} else {
+		if event.Type == tui.Rune {
+			if idx := strings.IndexRune(t.jumpLabels, event.Char); idx >= 0 && idx < t.maxItems() && idx < t.merger.Length() {
+				t.cy = idx + t.offset
+				if t.jumping == jumpAcceptEnabled {
+					req(reqClose)
+				}
+			}
+		}
+		t.jumping = jumpDisabled
+		req(reqList, reqInfo)
+	}
+
+	if queryChanged {
+		if t.isPreviewEnabled() {
+			_, _, q := hasPreviewFlags(t.previewOpts.command)
+			if q {
+				t.version++
+			}
+		}
+	}
+
+	if queryChanged || t.cx != previousCx {
+		req(reqPrompt)
+	}
+	if changed || newCommand != nil {
+		searchReq = &searchRequest{sort: t.sort, command: newCommand}
+	}
+	return
 }
 
 func (t *Terminal) constrain() {
