@@ -163,6 +163,7 @@ type infoStyle int
 const (
 	infoDefault infoStyle = iota
 	infoInline
+	infoInlineRight
 	infoHidden
 )
 
@@ -1198,6 +1199,8 @@ func parseInfoStyle(str string) infoStyle {
 		return infoDefault
 	case "inline":
 		return infoInline
+	case "inline-right":
+		return infoInlineRight
 	case "hidden":
 		return infoHidden
 	default:
@@ -1453,6 +1456,8 @@ func parseOptions(opts *Options, allArgs []string) {
 			opts.InfoStyle = infoHidden
 		case "--inline-info":
 			opts.InfoStyle = infoInline
+		case "--inline-right-info":
+			opts.InfoStyle = infoInlineRight
 		case "--no-inline-info":
 			opts.InfoStyle = infoDefault
 		case "--jump-labels":

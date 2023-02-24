@@ -1092,17 +1092,12 @@ func (t *Terminal) printInfo() {
 
 		t.move(line+1, 2, false)
 		pos = 2
-	case infoInline:
+	case infoInline, infoInlineRight:
 		pos = t.promptLen + t.queryLen[0] + t.queryLen[1] + 1
 		if pos+len(" < ") > t.window.Width() - 1 {
 			return
 		}
 		t.move(line, pos, true)
-		if t.reading {
-			t.window.CPrint(tui.ColSpinner, " < ")
-		} else {
-			t.window.CPrint(tui.ColPrompt, " < ")
-		}
 		pos += len(" < ")
 	case infoHidden:
 		return
@@ -1138,11 +1133,31 @@ func (t *Terminal) printInfo() {
 	if t.failed != nil && t.count == 0 {
 		output = fmt.Sprintf("[Command failed: %s]", *t.failed)
 	}
+
+	fillInfoTillRight := func() {
+		infoWidth := pos + t.displayWidth([]rune(output))
+		if t.fillHeaderTillEnd {
+			t.window.CPrint(tui.ColInfo, t.whitespaces(t.window.Width() - 1 - infoWidth))
+		}
+	}
+
+	if t.infoStyle == infoInlineRight {
+		fillInfoTillRight()
+	}
+
+	if t.infoStyle == infoInline || t.infoStyle == infoInlineRight {
+		if t.reading {
+			t.window.CPrint(tui.ColSpinner, " < ")
+		} else {
+			t.window.CPrint(tui.ColPrompt, " < ")
+		}
+	}
+
 	output = t.trimMessage(output, t.window.Width() - 1 - pos)
 	t.window.CPrint(tui.ColInfo, output)
-	infoWidth := pos + t.displayWidth([]rune(output))
-	if t.fillHeaderTillEnd {
-		t.window.CPrint(tui.ColInfo, t.whitespaces(t.window.Width() - 1 - infoWidth))
+
+	if t.infoStyle == infoInline {
+		fillInfoTillRight()
 	}
 }
 
