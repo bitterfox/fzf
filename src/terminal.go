@@ -4410,7 +4410,25 @@ func (t *Terminal) Loop() error {
 				suffix := copySlice(t.input[t.cx:])
 				t.input = append(append(t.input[:t.cx], t.yanked...), suffix...)
 				t.cx += len(t.yanked)
-			case actPageUp, actPageDown, actHalfPageUp, actHalfPageDown:
+			case actPageUp:
+				prevOffset := t.offset
+				t.offset = util.Constrain(t.offset - t.maxItems(), 0, util.Max(t.merger.Length() - t.maxItems(), 0))
+				if prevOffset == t.offset {
+					t.vset(0)
+				} else {
+					t.vset(t.offset + t.maxItems() - 1)
+				}
+				req(reqList)
+			case actPageDown:
+				prevOffset := t.offset
+				t.offset = util.Constrain(t.offset + t.maxItems(), 0, util.Max(t.merger.Length() - t.maxItems(), 0))
+				if prevOffset == t.offset {
+					t.vset(t.merger.Length())
+				} else {
+					t.vset(t.offset)
+				}
+				req(reqList)
+			case actHalfPageUp, actHalfPageDown:
 				// Calculate the number of lines to move
 				maxItems := t.maxItems()
 				linesToMove := maxItems - 1
