@@ -1918,13 +1918,9 @@ func (t *Terminal) printInfo() {
 		return
 	}
 
-	cursor := t.cy
-	if cursor < 0 {
-		cursor = 0
-	}
 	found := t.merger.Length()
 	total := util.Max(found, t.count)
-	output := fmt.Sprintf("%d,%d/%d", cursor, found, total)
+	output := fmt.Sprintf("%d/%d", found, total)
 	if t.toggleSort {
 		if t.sort {
 			output += " +S"
@@ -4403,26 +4399,26 @@ func (t *Terminal) Loop() error {
 			case actToggleDown:
 				if t.multi > 0 && t.merger.Length() > 0 && toggle() {
 					t.vmove(-1, true)
-					req(reqList, reqInfo)
+					req(reqList)
 				}
 			case actToggleUp:
 				if t.multi > 0 && t.merger.Length() > 0 && toggle() {
 					t.vmove(1, true)
-					req(reqList, reqInfo)
+					req(reqList)
 				}
 			case actDown:
 				if t.hasPreviewWindow() && t.focusPreview {
 					scrollPreviewBy(1)
 				} else {
 					t.vmove(-1, true)
-					req(reqList, reqInfo)
+					req(reqList)
 				}
 			case actUp:
 				if t.hasPreviewWindow() && t.focusPreview {
 					scrollPreviewBy(-1)
 				} else {
 					t.vmove(1, true)
-					req(reqList, reqInfo)
+					req(reqList)
 				}
 			case actAccept:
 				req(reqClose)
@@ -4450,11 +4446,11 @@ func (t *Terminal) Loop() error {
 			case actFirst:
 				t.vset(0)
 				t.constrain()
-				req(reqList, reqInfo)
+				req(reqList)
 			case actLast:
 				t.vset(t.merger.Length() - 1)
 				t.constrain()
-				req(reqList, reqInfo)
+				req(reqList)
 			case actPosition:
 				if n, e := strconv.Atoi(a.a); e == nil {
 					if n > 0 {
@@ -4464,7 +4460,7 @@ func (t *Terminal) Loop() error {
 					}
 					t.vset(n)
 					t.constrain()
-					req(reqList, reqInfo)
+					req(reqList)
 				}
 			case actPut:
 				str := []rune(a.a)
@@ -4505,7 +4501,7 @@ func (t *Terminal) Loop() error {
 					} else {
 						t.vset(t.offset + t.maxItems() - 1)
 					}
-					req(reqList, reqInfo)
+					req(reqList)
 				}
 			case actPageDown:
 				if t.hasPreviewWindow() && t.focusPreview {
@@ -4518,7 +4514,7 @@ func (t *Terminal) Loop() error {
 					} else {
 						t.vset(t.offset)
 					}
-					req(reqList, reqInfo)
+					req(reqList)
 				}
 			case actHalfPageUp, actHalfPageDown:
 				// Calculate the number of lines to move
@@ -4545,7 +4541,7 @@ func (t *Terminal) Loop() error {
 				// single-line mode
 				if !t.canSpanMultiLines() {
 					t.vset(t.cy + direction*linesToMove)
-					req(reqList, reqInfo)
+					req(reqList)
 					break
 				}
 
@@ -4591,7 +4587,7 @@ func (t *Terminal) Loop() error {
 						break
 					}
 				}
-				req(reqList, reqInfo)
+				req(reqList)
 			case actOffsetUp, actOffsetDown:
 				diff := 1
 				if a.t == actOffsetDown {
@@ -4610,7 +4606,7 @@ func (t *Terminal) Loop() error {
 					}
 					t.vmove(diff, false)
 				}
-				req(reqList, reqInfo)
+				req(reqList)
 			case actOffsetMiddle:
 				soff := t.scrollOff
 				t.scrollOff = t.window.Height()
@@ -4812,7 +4808,7 @@ func (t *Terminal) Loop() error {
 							perLine := t.avgNumLines()
 							t.offset = int(math.Ceil(float64(newBarStart) * float64(total*perLine-maxItems) / float64(maxItems*perLine-barLength)))
 							t.cy = t.offset + t.cy - prevOffset
-							req(reqList, reqInfo)
+							req(reqList)
 						}
 					}
 					break
@@ -4843,7 +4839,7 @@ func (t *Terminal) Loop() error {
 						t.cx = mxCons + t.xoffset
 					} else if my >= min {
 						t.vset(cy)
-						req(reqList, reqInfo)
+						req(reqList)
 						evt := tui.RightClick
 						if me.Mod {
 							evt = tui.SRightClick
@@ -5003,7 +4999,7 @@ func (t *Terminal) Loop() error {
 				if acts, prs := t.keymap[tui.JumpCancel.AsEvent()]; prs && !doActions(acts) {
 					continue
 				}
-				req(reqList, reqInfo)
+				req(reqList)
 			}
 			if len(actions) == 0 {
 				actions = t.keymap[event.Comparable()]
@@ -5037,7 +5033,7 @@ func (t *Terminal) Loop() error {
 			if acts, prs := t.keymap[jumpEvent.AsEvent()]; prs && !doActions(acts) {
 				continue
 			}
-			req(reqList, reqInfo)
+			req(reqList)
 		}
 
 		if queryChanged && t.canPreview() && len(t.previewOpts.command) > 0 {
