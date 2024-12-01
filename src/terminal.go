@@ -4410,77 +4410,94 @@ func (t *Terminal) Loop() error {
 				suffix := copySlice(t.input[t.cx:])
 				t.input = append(append(t.input[:t.cx], t.yanked...), suffix...)
 				t.cx += len(t.yanked)
-			case actPageUp, actPageDown, actHalfPageUp, actHalfPageDown:
-				// Calculate the number of lines to move
-				maxItems := t.maxItems()
-				linesToMove := maxItems - 1
-				if a.t == actHalfPageUp || a.t == actHalfPageDown {
-					linesToMove = maxItems / 2
-				}
-				// Move at least one line even in a very short window
-				linesToMove = util.Max(1, linesToMove)
-
-				// Determine the direction of the movement
-				direction := -1
-				if a.t == actPageUp || a.t == actHalfPageUp {
-					direction = 1
-				}
-
-				// In non-default layout, items are listed from top to bottom
-				if t.layout != layoutDefault {
-					direction *= -1
-				}
-
-				// We can simply add the number of lines to the current position in
-				// single-line mode
-				if !t.canSpanMultiLines() {
-					t.vset(t.cy + direction*linesToMove)
+			case actPageUp:
+				if t.scrollOff != 0 {
+					t.defaultScroll(a.t)
 					req(reqList)
 					break
 				}
-
-				// But in multi-line mode, we need to carefully limit the amount of
-				// vertical movement so that items are not skipped. In order to do
-				// this, we calculate the minimum or maximum offset based on the
-				// direction of the movement and the number of lines of the items
-				// around the current scroll offset.
-				var minOffset, maxOffset, lineSum int
-				if direction > 0 {
-					maxOffset = t.offset
-					for ; maxOffset < t.merger.Length(); maxOffset++ {
-						itemLines, _ := t.numItemLines(t.merger.Get(maxOffset).item, maxItems)
-						lineSum += itemLines
-						if lineSum >= maxItems {
-							break
-						}
-					}
-				} else {
-					minOffset = t.offset
-					for ; minOffset >= 0 && minOffset < t.merger.Length(); minOffset-- {
-						itemLines, _ := t.numItemLines(t.merger.Get(minOffset).item, maxItems)
-						lineSum += itemLines
-						if lineSum >= maxItems {
-							if lineSum > maxItems {
-								minOffset++
-							}
-							break
-						}
-					}
+				lines := t.maxItems()
+				if t.offset == 0 {
+					t.vset(0)
+					req(reqList)
+					break
 				}
-
-				for i := 0; i < linesToMove; i++ {
-					cy, offset := t.cy, t.offset
-					t.vset(cy + direction)
-					t.constrain()
-					if cy == t.cy {
-						break
-					}
-					if i > 0 && (direction > 0 && t.offset > maxOffset ||
-						direction < 0 && t.offset < minOffset) {
-						t.cy, t.offset = cy, offset
+				currentOffset := t.offset
+				newOffset := t.offset
+				for ; newOffset > 0; newOffset-- {
+					itemLines, _ := t.numItemLines(t.merger.Get(newOffset - 1).item, t.maxItems())
+					lines = lines - itemLines
+					if lines < 0 {
 						break
 					}
 				}
+				if currentOffset == newOffset {
+					newOffset--
+				}
+				t.offset = newOffset
+				y := t.offset // 0
+				lines = t.maxItems() // 11
+				for ; y < t.merger.Length(); y++ {
+					itemLines, _ := t.numItemLines(t.merger.Get(y).item, t.maxItems())
+					lines = lines - itemLines
+					if lines == 0 {
+						break
+					}
+					if lines < 0 {
+						y--
+						break
+					}
+				}
+				t.vset(util.Constrain(y, t.offset, currentOffset-1)) // 10
+				req(reqList)
+			case actPageDown:
+				if t.scrollOff != 0 {
+					t.defaultScroll(a.t)
+					req(reqList)
+					break
+				}
+				lines := t.maxItems()
+				currentOffset := t.offset
+				newOffset := t.offset
+				for ; newOffset < t.merger.Length(); newOffset++ {
+					itemLines, _ := t.numItemLines(t.merger.Get(newOffset).item, t.maxItems())
+					lines = lines - itemLines
+					if lines < 0 {
+						break
+					}
+				}
+				if newOffset == currentOffset {
+					t.offset++
+					t.vset(t.offset)
+					req(reqList)
+					break
+				}
+				t.offset = newOffset
+				t.vset(newOffset)
+				t.constrain()
+				if t.offset != newOffset {
+					y := t.merger.Length() - 1
+					lines = t.maxItems()
+					for ; y >= 0; y-- {
+						itemLines, _ := t.numItemLines(t.merger.Get(y).item, t.maxItems())
+						lines = lines - itemLines
+						if lines == 0 {
+							break
+						}
+						if lines < 0 {
+							y++
+							break
+						}
+					}
+					t.vset(y)
+				}
+				if t.offset == currentOffset {
+					t.vset(t.merger.Length()-1)
+				}
+
+				req(reqList)
+			case actHalfPageUp, actHalfPageDown:
+				t.defaultScroll(a.t)
 				req(reqList)
 			case actOffsetUp, actOffsetDown:
 				diff := 1
@@ -5148,4 +5165,76 @@ func (t *Terminal) dumpStatus(params getParams) string {
 	}
 	bytes, _ := json.Marshal(&dump) // TODO: Errors?
 	return string(bytes)
+}
+
+func (t *Terminal) defaultScroll(at actionType) {
+	// Calculate the number of lines to move
+	maxItems := t.maxItems()
+	linesToMove := maxItems - 1
+	if at == actHalfPageUp || at == actHalfPageDown {
+		linesToMove = maxItems / 2
+	}
+	// Move at least one line even in a very short window
+	linesToMove = util.Max(1, linesToMove)
+
+	// Determine the direction of the movement
+	direction := -1
+	if at == actPageUp || at == actHalfPageUp {
+		direction = 1
+	}
+
+	// In non-default layout, items are listed from top to bottom
+	if t.layout != layoutDefault {
+		direction *= -1
+	}
+
+	// We can simply add the number of lines to the current position in
+	// single-line mode
+	if !t.canSpanMultiLines() {
+		t.vset(t.cy + direction*linesToMove)
+		return
+	}
+
+	// But in multi-line mode, we need to carefully limit the amount of
+	// vertical movement so that items are not skipped. In order to do
+	// this, we calculate the minimum or maximum offset based on the
+	// direction of the movement and the number of lines of the items
+	// around the current scroll offset.
+	var minOffset, maxOffset, lineSum int
+	if direction > 0 {
+		maxOffset = t.offset
+		for ; maxOffset < t.merger.Length(); maxOffset++ {
+			itemLines, _ := t.numItemLines(t.merger.Get(maxOffset).item, maxItems)
+			lineSum += itemLines
+			if lineSum >= maxItems {
+				break
+			}
+		}
+	} else {
+		minOffset = t.offset
+		for ; minOffset >= 0 && minOffset < t.merger.Length(); minOffset-- {
+			itemLines, _ := t.numItemLines(t.merger.Get(minOffset).item, maxItems)
+			lineSum += itemLines
+			if lineSum >= maxItems {
+				if lineSum > maxItems {
+					minOffset++
+				}
+				break
+			}
+		}
+	}
+
+	for i := 0; i < linesToMove; i++ {
+		cy, offset := t.cy, t.offset
+		t.vset(cy + direction)
+		t.constrain()
+		if cy == t.cy {
+			break
+		}
+		if i > 0 && (direction > 0 && t.offset > maxOffset ||
+			direction < 0 && t.offset < minOffset) {
+			t.cy, t.offset = cy, offset
+			break
+		}
+	}
 }
