@@ -213,144 +213,146 @@ type Status struct {
 
 // Terminal represents terminal input/output
 type Terminal struct {
-	initDelay          time.Duration
-	infoCommand        string
-	infoStyle          infoStyle
-	infoPrefix         string
-	wrap               bool
-	wrapSign           string
-	wrapSignWidth      int
-	separator          labelPrinter
-	separatorLen       int
-	spinner            []string
-	promptString       string
-	prompt             func()
-	promptLen          int
-	borderLabel        labelPrinter
-	borderLabelLen     int
-	borderLabelOpts    labelOpts
-	previewLabel       labelPrinter
-	previewLabelLen    int
-	previewLabelOpts   labelOpts
-	pointer            string
-	pointerLen         int
-	pointerEmpty       string
-	marker             string
-	markerLen          int
-	markerEmpty        string
-	markerMultiLine    [3]string
-	queryLen           [2]int
-	layout             layoutType
-	fullscreen         bool
-	keepRight          bool
-	hscroll            bool
-	hscrollOff         int
-	scrollOff          int
-	gap                int
-	wordRubout         string
-	wordNext           string
-	cx                 int
-	cy                 int
-	offset             int
-	xoffset            int
-	yanked             []rune
-	input              []rune
-	multi              int
-	multiLine          bool
-	sort               bool
-	toggleSort         bool
-	track              trackOption
-	delimiter          Delimiter
-	expect             map[tui.Event]string
-	keymap             map[tui.Event][]*action
-	keymapOrg          map[tui.Event][]*action
-	pressed            string
-	printQueue         []string
-	printQuery         bool
-	history            *History
-	cycle              bool
-	highlightLine      bool
-	headerVisible      bool
-	headerFirst        bool
-	headerLines        int
-	header             []string
-	header0            []string
-	ellipsis           string
-	scrollbar          string
-	previewScrollbar   string
-	ansi               bool
-	tabstop            int
-	margin             [4]sizeSpec
-	padding            [4]sizeSpec
-	unicode            bool
-	listenAddr         *listenAddress
-	listenPort         *int
-	listener           net.Listener
-	listenUnsafe       bool
-	borderShape        tui.BorderShape
-	cleanExit          bool
-	executor           *util.Executor
-	paused             bool
-	border             tui.Window
-	window             tui.Window
-	pborder            tui.Window
-	pwindow            tui.Window
-	borderWidth        int
-	count              int
-	progress           int
-	hasStartActions    bool
-	hasResultActions   bool
-	hasFocusActions    bool
-	hasLoadActions     bool
-	hasResizeActions   bool
-	triggerLoad        bool
-	reading            bool
-	running            *util.AtomicBool
-	failed             *string
-	jumping            jumpMode
-	jumpLabels         string
-	printer            func(string)
-	printsep           string
-	merger             *Merger
-	selected           map[int32]selectedItem
-	version            int64
-	revision           revision
-	reqBox             *util.EventBox
-	initialPreviewOpts previewOpts
-	previewOpts        previewOpts
-	activePreviewOpts  *previewOpts
-	previewer          previewer
-	previewed          previewed
-	previewBox         *util.EventBox
-	focusPreview       bool
-	eventBox           *util.EventBox
-	mutex              sync.Mutex
-	uiMutex            sync.Mutex
-	initFunc           func() error
-	prevLines          []itemLine
-	suppress           bool
-	sigstop            bool
-	startChan          chan fitpad
-	killChan           chan bool
-	serverInputChan    chan []*action
-	keyChan            chan tui.Event
-	eventChan          chan tui.Event
-	slab               *util.Slab
-	theme              *tui.ColorTheme
-	tui                tui.Renderer
-	ttyin              *os.File
-	executing          *util.AtomicBool
-	termSize           tui.TermSize
-	lastAction         actionType
-	lastKey            string
-	lastFocus          int32
-	areaLines          int
-	areaColumns        int
-	forcePreview       bool
-	clickHeaderLine    int
-	clickHeaderColumn  int
-	proxyScript        string
-	reloadEnabled      bool
+	initDelay           time.Duration
+	infoCommand         string
+	infoStyle           infoStyle
+	infoPrefix          string
+	wrap                bool
+	wrapSign            string
+	wrapSignWidth       int
+	separator           labelPrinter
+	separatorLen        int
+	spinner             []string
+	promptString        string
+	prompt              func()
+	promptLen           int
+	useDefaultPrompt    bool
+	defaultPromptString string
+	borderLabel         labelPrinter
+	borderLabelLen      int
+	borderLabelOpts     labelOpts
+	previewLabel        labelPrinter
+	previewLabelLen     int
+	previewLabelOpts    labelOpts
+	pointer             string
+	pointerLen          int
+	pointerEmpty        string
+	marker              string
+	markerLen           int
+	markerEmpty         string
+	markerMultiLine     [3]string
+	queryLen            [2]int
+	layout              layoutType
+	fullscreen          bool
+	keepRight           bool
+	hscroll             bool
+	hscrollOff          int
+	scrollOff           int
+	gap                 int
+	wordRubout          string
+	wordNext            string
+	cx                  int
+	cy                  int
+	offset              int
+	xoffset             int
+	yanked              []rune
+	input               []rune
+	multi               int
+	multiLine           bool
+	sort                bool
+	toggleSort          bool
+	track               trackOption
+	delimiter           Delimiter
+	expect              map[tui.Event]string
+	keymap              map[tui.Event][]*action
+	keymapOrg           map[tui.Event][]*action
+	pressed             string
+	printQueue          []string
+	printQuery          bool
+	history             *History
+	cycle               bool
+	highlightLine       bool
+	headerVisible       bool
+	headerFirst         bool
+	headerLines         int
+	header              []string
+	header0             []string
+	ellipsis            string
+	scrollbar           string
+	previewScrollbar    string
+	ansi                bool
+	tabstop             int
+	margin              [4]sizeSpec
+	padding             [4]sizeSpec
+	unicode             bool
+	listenAddr          *listenAddress
+	listenPort          *int
+	listener            net.Listener
+	listenUnsafe        bool
+	borderShape         tui.BorderShape
+	cleanExit           bool
+	executor            *util.Executor
+	paused              bool
+	border              tui.Window
+	window              tui.Window
+	pborder             tui.Window
+	pwindow             tui.Window
+	borderWidth         int
+	count               int
+	progress            int
+	hasStartActions     bool
+	hasResultActions    bool
+	hasFocusActions     bool
+	hasLoadActions      bool
+	hasResizeActions    bool
+	triggerLoad         bool
+	reading             bool
+	running             *util.AtomicBool
+	failed              *string
+	jumping             jumpMode
+	jumpLabels          string
+	printer             func(string)
+	printsep            string
+	merger              *Merger
+	selected            map[int32]selectedItem
+	version             int64
+	revision            revision
+	reqBox              *util.EventBox
+	initialPreviewOpts  previewOpts
+	previewOpts         previewOpts
+	activePreviewOpts   *previewOpts
+	previewer           previewer
+	previewed           previewed
+	previewBox          *util.EventBox
+	focusPreview        bool
+	eventBox            *util.EventBox
+	mutex               sync.Mutex
+	uiMutex             sync.Mutex
+	initFunc            func() error
+	prevLines           []itemLine
+	suppress            bool
+	sigstop             bool
+	startChan           chan fitpad
+	killChan            chan bool
+	serverInputChan     chan []*action
+	keyChan             chan tui.Event
+	eventChan           chan tui.Event
+	slab                *util.Slab
+	theme               *tui.ColorTheme
+	tui                 tui.Renderer
+	ttyin               *os.File
+	executing           *util.AtomicBool
+	termSize            tui.TermSize
+	lastAction          actionType
+	lastKey             string
+	lastFocus           int32
+	areaLines           int
+	areaColumns         int
+	forcePreview        bool
+	clickHeaderLine     int
+	clickHeaderColumn   int
+	proxyScript         string
+	reloadEnabled       bool
 }
 
 type selectedItem struct {
@@ -427,6 +429,7 @@ const (
 	actChangeMulti
 	actChangePreviewLabel
 	actChangePrompt
+	actTogglePrompt
 	actChangeQuery
 	actClearScreen
 	actClearQuery
@@ -776,110 +779,112 @@ func NewTerminal(opts *Options, eventBox *util.EventBox, executor *util.Executor
 	}
 
 	t := Terminal{
-		initDelay:          delay,
-		infoCommand:        opts.InfoCommand,
-		infoStyle:          opts.InfoStyle,
-		infoPrefix:         opts.InfoPrefix,
-		separator:          nil,
-		spinner:            makeSpinner(opts.Unicode),
-		promptString:       opts.Prompt,
-		queryLen:           [2]int{0, 0},
-		layout:             opts.Layout,
-		fullscreen:         fullscreen,
-		keepRight:          opts.KeepRight,
-		hscroll:            opts.Hscroll,
-		hscrollOff:         opts.HscrollOff,
-		scrollOff:          opts.ScrollOff,
-		pointer:            *opts.Pointer,
-		pointerLen:         uniseg.StringWidth(*opts.Pointer),
-		marker:             *opts.Marker,
-		markerLen:          uniseg.StringWidth(*opts.Marker),
-		markerMultiLine:    *opts.MarkerMulti,
-		wordRubout:         wordRubout,
-		wordNext:           wordNext,
-		cx:                 len(input),
-		cy:                 0,
-		offset:             0,
-		xoffset:            0,
-		yanked:             []rune{},
-		input:              input,
-		multi:              opts.Multi,
-		multiLine:          opts.ReadZero && opts.MultiLine,
-		wrap:               opts.Wrap,
-		sort:               opts.Sort > 0,
-		toggleSort:         opts.ToggleSort,
-		track:              opts.Track,
-		delimiter:          opts.Delimiter,
-		expect:             opts.Expect,
-		keymap:             opts.Keymap,
-		keymapOrg:          keymapCopy,
-		pressed:            "",
-		printQuery:         opts.PrintQuery,
-		history:            opts.History,
-		margin:             opts.Margin,
-		padding:            opts.Padding,
-		unicode:            opts.Unicode,
-		listenAddr:         opts.ListenAddr,
-		listenUnsafe:       opts.Unsafe,
-		borderShape:        opts.BorderShape,
-		borderWidth:        1,
-		borderLabel:        nil,
-		borderLabelOpts:    opts.BorderLabel,
-		previewLabel:       nil,
-		previewLabelOpts:   opts.PreviewLabel,
-		cleanExit:          opts.ClearOnExit,
-		executor:           executor,
-		paused:             opts.Phony,
-		cycle:              opts.Cycle,
-		highlightLine:      opts.CursorLine,
-		headerVisible:      true,
-		headerFirst:        opts.HeaderFirst,
-		headerLines:        opts.HeaderLines,
-		gap:                opts.Gap,
-		header:             []string{},
-		header0:            opts.Header,
-		ansi:               opts.Ansi,
-		tabstop:            opts.Tabstop,
-		hasStartActions:    false,
-		hasResultActions:   false,
-		hasFocusActions:    false,
-		hasLoadActions:     false,
-		triggerLoad:        false,
-		reading:            true,
-		running:            util.NewAtomicBool(true),
-		failed:             nil,
-		jumping:            jumpDisabled,
-		jumpLabels:         opts.JumpLabels,
-		printer:            opts.Printer,
-		printsep:           opts.PrintSep,
-		proxyScript:        opts.ProxyScript,
-		merger:             EmptyMerger(revision{}),
-		selected:           make(map[int32]selectedItem),
-		reqBox:             util.NewEventBox(),
-		initialPreviewOpts: opts.Preview,
-		previewOpts:        opts.Preview,
-		previewer:          previewer{0, []string{}, 0, false, true, disabledState, "", []bool{}},
-		previewed:          previewed{0, 0, 0, false, false, false, false},
-		previewBox:         previewBox,
-		focusPreview:       false,
-		eventBox:           eventBox,
-		mutex:              sync.Mutex{},
-		uiMutex:            sync.Mutex{},
-		suppress:           true,
-		slab:               util.MakeSlab(slab16Size, slab32Size),
-		theme:              opts.Theme,
-		startChan:          make(chan fitpad, 1),
-		killChan:           make(chan bool),
-		serverInputChan:    make(chan []*action, 100),
-		keyChan:            make(chan tui.Event),
-		eventChan:          make(chan tui.Event, 6), // start | (load + result + zero|one) | (focus) | (resize)
-		tui:                renderer,
-		ttyin:              ttyin,
-		initFunc:           func() error { return renderer.Init() },
-		executing:          util.NewAtomicBool(false),
-		lastAction:         actStart,
-		lastFocus:          minItem.Index(),
-		reloadEnabled:      true}
+		initDelay:           delay,
+		infoCommand:         opts.InfoCommand,
+		infoStyle:           opts.InfoStyle,
+		infoPrefix:          opts.InfoPrefix,
+		separator:           nil,
+		spinner:             makeSpinner(opts.Unicode),
+		promptString:        opts.Prompt,
+		useDefaultPrompt:    true,
+		defaultPromptString: opts.Prompt,
+		queryLen:            [2]int{0, 0},
+		layout:              opts.Layout,
+		fullscreen:          fullscreen,
+		keepRight:           opts.KeepRight,
+		hscroll:             opts.Hscroll,
+		hscrollOff:          opts.HscrollOff,
+		scrollOff:           opts.ScrollOff,
+		pointer:             *opts.Pointer,
+		pointerLen:          uniseg.StringWidth(*opts.Pointer),
+		marker:              *opts.Marker,
+		markerLen:           uniseg.StringWidth(*opts.Marker),
+		markerMultiLine:     *opts.MarkerMulti,
+		wordRubout:          wordRubout,
+		wordNext:            wordNext,
+		cx:                  len(input),
+		cy:                  0,
+		offset:              0,
+		xoffset:             0,
+		yanked:              []rune{},
+		input:               input,
+		multi:               opts.Multi,
+		multiLine:           opts.ReadZero && opts.MultiLine,
+		wrap:                opts.Wrap,
+		sort:                opts.Sort > 0,
+		toggleSort:          opts.ToggleSort,
+		track:               opts.Track,
+		delimiter:           opts.Delimiter,
+		expect:              opts.Expect,
+		keymap:              opts.Keymap,
+		keymapOrg:           keymapCopy,
+		pressed:             "",
+		printQuery:          opts.PrintQuery,
+		history:             opts.History,
+		margin:              opts.Margin,
+		padding:             opts.Padding,
+		unicode:             opts.Unicode,
+		listenAddr:          opts.ListenAddr,
+		listenUnsafe:        opts.Unsafe,
+		borderShape:         opts.BorderShape,
+		borderWidth:         1,
+		borderLabel:         nil,
+		borderLabelOpts:     opts.BorderLabel,
+		previewLabel:        nil,
+		previewLabelOpts:    opts.PreviewLabel,
+		cleanExit:           opts.ClearOnExit,
+		executor:            executor,
+		paused:              opts.Phony,
+		cycle:               opts.Cycle,
+		highlightLine:       opts.CursorLine,
+		headerVisible:       true,
+		headerFirst:         opts.HeaderFirst,
+		headerLines:         opts.HeaderLines,
+		gap:                 opts.Gap,
+		header:              []string{},
+		header0:             opts.Header,
+		ansi:                opts.Ansi,
+		tabstop:             opts.Tabstop,
+		hasStartActions:     false,
+		hasResultActions:    false,
+		hasFocusActions:     false,
+		hasLoadActions:      false,
+		triggerLoad:         false,
+		reading:             true,
+		running:             util.NewAtomicBool(true),
+		failed:              nil,
+		jumping:             jumpDisabled,
+		jumpLabels:          opts.JumpLabels,
+		printer:             opts.Printer,
+		printsep:            opts.PrintSep,
+		proxyScript:         opts.ProxyScript,
+		merger:              EmptyMerger(revision{}),
+		selected:            make(map[int32]selectedItem),
+		reqBox:              util.NewEventBox(),
+		initialPreviewOpts:  opts.Preview,
+		previewOpts:         opts.Preview,
+		previewer:           previewer{0, []string{}, 0, false, true, disabledState, "", []bool{}},
+		previewed:           previewed{0, 0, 0, false, false, false, false},
+		previewBox:          previewBox,
+		focusPreview:        false,
+		eventBox:            eventBox,
+		mutex:               sync.Mutex{},
+		uiMutex:             sync.Mutex{},
+		suppress:            true,
+		slab:                util.MakeSlab(slab16Size, slab32Size),
+		theme:               opts.Theme,
+		startChan:           make(chan fitpad, 1),
+		killChan:            make(chan bool),
+		serverInputChan:     make(chan []*action, 100),
+		keyChan:             make(chan tui.Event),
+		eventChan:           make(chan tui.Event, 6), // start | (load + result + zero|one) | (focus) | (resize)
+		tui:                 renderer,
+		ttyin:               ttyin,
+		initFunc:            func() error { return renderer.Init() },
+		executing:           util.NewAtomicBool(false),
+		lastAction:          actStart,
+		lastFocus:           minItem.Index(),
+		reloadEnabled:       true}
 	t.prompt, t.promptLen = t.parsePrompt(opts.Prompt)
 	// Pre-calculated empty pointer and marker signs
 	t.pointerEmpty = strings.Repeat(" ", t.pointerLen)
@@ -4237,6 +4242,15 @@ func (t *Terminal) Loop() error {
 			case actChangePrompt:
 				t.promptString = a.a
 				t.prompt, t.promptLen = t.parsePrompt(a.a)
+				req(reqPrompt)
+			case actTogglePrompt:
+				if t.useDefaultPrompt {
+					t.promptString = a.a
+				} else {
+					t.promptString = t.defaultPromptString
+				}
+				t.prompt, t.promptLen = t.parsePrompt(t.promptString)
+				t.useDefaultPrompt = !t.useDefaultPrompt
 				req(reqPrompt)
 			case actPreview:
 				if !t.hasPreviewWindow() {

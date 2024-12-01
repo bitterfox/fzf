@@ -1211,7 +1211,7 @@ const (
 
 func init() {
 	executeRegexp = regexp.MustCompile(
-		`(?si)[:+](become|execute(?:-multi|-silent|-and-exit-on-success)?|reload(?:-sync)?|preview|(?:change|transform)-(?:header|query|prompt|border-label|preview-label)|transform|change-(?:preview-window|preview|multi)|(?:re|un)bind|pos|put|print)`)
+		`(?si)[:+](become|execute(?:-multi|-silent|-and-exit-on-success)?|reload(?:-sync)?|preview|(?:change|transform)-(?:header|query|prompt|border-label|preview-label)|transform|toggle-prompt|change-(?:preview-window|preview|multi)|(?:re|un)bind|pos|put|print)`)
 	splitRegexp = regexp.MustCompile("[,:]+")
 	actionNameRegexp = regexp.MustCompile("(?i)^[a-z-]+")
 }
@@ -1583,6 +1583,8 @@ func isExecuteAction(str string) actionType {
 		return actChangePreview
 	case "change-prompt":
 		return actChangePrompt
+	case "toggle-prompt":
+		return actTogglePrompt
 	case "change-query":
 		return actChangeQuery
 	case "change-multi":
