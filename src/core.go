@@ -278,6 +278,7 @@ func Run(opts *Options) (int, error) {
 	var nextEnviron []string
 	eventBox.Watch(EvtReadNew)
 	total := 0
+	prevPaused := terminal.paused
 	query := []rune{}
 	determine := func(final bool) {
 		if heightUnknown {
@@ -313,9 +314,10 @@ func Run(opts *Options) (int, error) {
 		ticks++
 		input := func() []rune {
 			paused, input := terminal.Input()
-			if !paused {
+			if !paused || paused != prevPaused {
 				query = input
 			}
+			prevPaused = paused
 			return query
 		}
 		eventBox.Wait(func(events *util.Events) {

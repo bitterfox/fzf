@@ -1463,6 +1463,12 @@ func parseActionList(masked string, original string, prevActions []*action, putA
 			} else {
 				return nil, errors.New("unable to put non-printable character")
 			}
+		case "enable-reload":
+			appendAction(actEnableReload)
+		case "disable-reload":
+			appendAction(actDisableReload)
+		case "toggle-reload":
+			appendAction(actToggleReload)
 		default:
 			t := isExecuteAction(specLower)
 			if t == actIgnore {

@@ -349,6 +349,7 @@ type Terminal struct {
 	clickHeaderLine    int
 	clickHeaderColumn  int
 	proxyScript        string
+	reloadEnabled      bool
 }
 
 type selectedItem struct {
@@ -508,6 +509,9 @@ const (
 	actLast
 	actReload
 	actReloadSync
+	actEnableReload
+	actDisableReload
+	actToggleReload
 	actDisableSearch
 	actEnableSearch
 	actSelect
@@ -871,7 +875,8 @@ func NewTerminal(opts *Options, eventBox *util.EventBox, executor *util.Executor
 		initFunc:           func() error { return renderer.Init() },
 		executing:          util.NewAtomicBool(false),
 		lastAction:         actStart,
-		lastFocus:          minItem.Index()}
+		lastFocus:          minItem.Index(),
+		reloadEnabled:      true}
 	t.prompt, t.promptLen = t.parsePrompt(opts.Prompt)
 	// Pre-calculated empty pointer and marker signs
 	t.pointerEmpty = strings.Repeat(" ", t.pointerLen)
@@ -4820,6 +4825,10 @@ func (t *Terminal) Loop() error {
 					}
 				}
 			case actReload, actReloadSync:
+				if !t.reloadEnabled {
+					break
+				}
+
 				t.failed = nil
 
 				valid, list := t.buildPlusList(a.a, false)
@@ -4836,6 +4845,12 @@ func (t *Terminal) Loop() error {
 					reloadSync = a.t == actReloadSync
 					t.reading = true
 				}
+			case actEnableReload:
+				t.reloadEnabled = true
+			case actDisableReload:
+				t.reloadEnabled = false
+			case actToggleReload:
+				t.reloadEnabled = !t.reloadEnabled
 			case actUnbind:
 				if keys, err := parseKeyChords(a.a, "PANIC"); err == nil {
 					for key := range keys {

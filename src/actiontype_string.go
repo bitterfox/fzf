@@ -113,20 +113,23 @@ func _() {
 	_ = x[actLast-102]
 	_ = x[actReload-103]
 	_ = x[actReloadSync-104]
-	_ = x[actDisableSearch-105]
-	_ = x[actEnableSearch-106]
-	_ = x[actSelect-107]
-	_ = x[actDeselect-108]
-	_ = x[actUnbind-109]
-	_ = x[actRebind-110]
-	_ = x[actBecome-111]
-	_ = x[actShowHeader-112]
-	_ = x[actHideHeader-113]
+	_ = x[actEnableReload-105]
+	_ = x[actDisableReload-106]
+	_ = x[actToggleReload-107]
+	_ = x[actDisableSearch-108]
+	_ = x[actEnableSearch-109]
+	_ = x[actSelect-110]
+	_ = x[actDeselect-111]
+	_ = x[actUnbind-112]
+	_ = x[actRebind-113]
+	_ = x[actBecome-114]
+	_ = x[actShowHeader-115]
+	_ = x[actHideHeader-116]
 }
 
-const _actionType_name = "actIgnoreactStartactClickactInvalidactCharactMouseactBeginningOfLineactAbortactAcceptactAcceptNonEmptyactAcceptOrPrintQueryactBackwardCharactBackwardDeleteCharactBackwardDeleteCharEofactBackwardWordactCancelactChangeBorderLabelactChangeHeaderactChangeMultiactChangePreviewLabelactChangePromptactChangeQueryactClearScreenactClearQueryactClearSelectionactCloseactDeleteCharactDeleteCharEofactEndOfLineactFatalactForwardCharactForwardWordactKillLineactKillWordactUnixLineDiscardactUnixWordRuboutactYankactBackwardKillWordactSelectAllactDeselectAllactToggleactToggleSearchactToggleAllactToggleDownactToggleUpactToggleInactToggleOutactToggleTrackactToggleTrackCurrentactToggleHeaderactToggleWrapactTrackCurrentactUntrackCurrentactDownactUpactPageUpactPageDownactPositionactHalfPageUpactHalfPageDownactOffsetUpactOffsetDownactOffsetMiddleactJumpactJumpAcceptactPrintQueryactRefreshPreviewactReplaceQueryactToggleSortactShowPreviewactHidePreviewactTogglePreviewactTogglePreviewFocusactTogglePreviewWrapactTransformactTransformBorderLabelactTransformHeaderactTransformPreviewLabelactTransformPromptactTransformQueryactPreviewactChangePreviewactChangePreviewWindowactPreviewTopactPreviewBottomactPreviewUpactPreviewDownactPreviewPageUpactPreviewPageDownactPreviewHalfPageUpactPreviewHalfPageDownactPrevHistoryactPrevSelectedactPrintactPutactNextHistoryactNextSelectedactExecuteactExecuteSilentactExecuteMultiactSigStopactFirstactLastactReloadactReloadSyncactDisableSearchactEnableSearchactSelectactDeselectactUnbindactRebindactBecomeactShowHeaderactHideHeader"
+const _actionType_name = "actIgnoreactStartactClickactInvalidactCharactMouseactBeginningOfLineactAbortactAcceptactAcceptNonEmptyactAcceptOrPrintQueryactBackwardCharactBackwardDeleteCharactBackwardDeleteCharEofactBackwardWordactCancelactChangeBorderLabelactChangeHeaderactChangeMultiactChangePreviewLabelactChangePromptactChangeQueryactClearScreenactClearQueryactClearSelectionactCloseactDeleteCharactDeleteCharEofactEndOfLineactFatalactForwardCharactForwardWordactKillLineactKillWordactUnixLineDiscardactUnixWordRuboutactYankactBackwardKillWordactSelectAllactDeselectAllactToggleactToggleSearchactToggleAllactToggleDownactToggleUpactToggleInactToggleOutactToggleTrackactToggleTrackCurrentactToggleHeaderactToggleWrapactTrackCurrentactUntrackCurrentactDownactUpactPageUpactPageDownactPositionactHalfPageUpactHalfPageDownactOffsetUpactOffsetDownactOffsetMiddleactJumpactJumpAcceptactPrintQueryactRefreshPreviewactReplaceQueryactToggleSortactShowPreviewactHidePreviewactTogglePreviewactTogglePreviewFocusactTogglePreviewWrapactTransformactTransformBorderLabelactTransformHeaderactTransformPreviewLabelactTransformPromptactTransformQueryactPreviewactChangePreviewactChangePreviewWindowactPreviewTopactPreviewBottomactPreviewUpactPreviewDownactPreviewPageUpactPreviewPageDownactPreviewHalfPageUpactPreviewHalfPageDownactPrevHistoryactPrevSelectedactPrintactPutactNextHistoryactNextSelectedactExecuteactExecuteSilentactExecuteMultiactSigStopactFirstactLastactReloadactReloadSyncactEnableReloadactDisableReloadactToggleReloadactDisableSearchactEnableSearchactSelectactDeselectactUnbindactRebindactBecomeactShowHeaderactHideHeader"
 
-var _actionType_index = [...]uint16{0, 9, 17, 25, 35, 42, 50, 68, 76, 85, 102, 123, 138, 159, 183, 198, 207, 227, 242, 256, 277, 292, 306, 320, 333, 350, 358, 371, 387, 399, 407, 421, 435, 446, 457, 475, 492, 499, 518, 530, 544, 553, 568, 580, 593, 604, 615, 627, 641, 662, 677, 690, 705, 722, 729, 734, 743, 754, 765, 778, 793, 804, 817, 832, 839, 852, 865, 882, 897, 910, 924, 938, 954, 975, 995, 1007, 1030, 1048, 1072, 1090, 1107, 1117, 1133, 1155, 1168, 1184, 1196, 1210, 1226, 1244, 1264, 1286, 1300, 1315, 1323, 1329, 1343, 1358, 1368, 1384, 1399, 1409, 1417, 1424, 1433, 1446, 1462, 1477, 1486, 1497, 1506, 1515, 1524, 1537, 1550}
+var _actionType_index = [...]uint16{0, 9, 17, 25, 35, 42, 50, 68, 76, 85, 102, 123, 138, 159, 183, 198, 207, 227, 242, 256, 277, 292, 306, 320, 333, 350, 358, 371, 387, 399, 407, 421, 435, 446, 457, 475, 492, 499, 518, 530, 544, 553, 568, 580, 593, 604, 615, 627, 641, 662, 677, 690, 705, 722, 729, 734, 743, 754, 765, 778, 793, 804, 817, 832, 839, 852, 865, 882, 897, 910, 924, 938, 954, 975, 995, 1007, 1030, 1048, 1072, 1090, 1107, 1117, 1133, 1155, 1168, 1184, 1196, 1210, 1226, 1244, 1264, 1286, 1300, 1315, 1323, 1329, 1343, 1358, 1368, 1384, 1399, 1409, 1417, 1424, 1433, 1446, 1461, 1477, 1492, 1508, 1523, 1532, 1543, 1552, 1561, 1570, 1583, 1596}
 
 func (i actionType) String() string {
 	if i < 0 || i >= actionType(len(_actionType_index)-1) {
