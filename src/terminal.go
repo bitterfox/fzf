@@ -2,6 +2,7 @@ package fzf
 
 import (
 	"bufio"
+    "errors"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -391,7 +392,8 @@ const (
 	reqPreviewRefresh
 	reqPreviewDelayed
 	reqBecome
-	reqQuit
+	reqQuitInterrupt
+	reqQuitOk
 	reqFatal
 )
 
@@ -504,6 +506,7 @@ const (
 	actExecute
 	actExecuteSilent
 	actExecuteMulti // Deprecated
+	actExecuteAndExitOnSuccess
 	actSigStop
 	actFirst
 	actLast
@@ -1925,7 +1928,7 @@ func (t *Terminal) printInfo() {
 	var outputPrinter labelPrinter
 	outputLen := len(output)
 	if t.infoCommand != "" {
-		output = t.executeCommand(t.infoCommand, false, true, true, true, output)
+		output, _ := t.executeCommand(t.infoCommand, false, true, true, true, output)
 		outputPrinter, outputLen = t.ansiLabelPrinter(output, &tui.ColInfo, false)
 	}
 
@@ -3189,13 +3192,13 @@ func (t *Terminal) fullRedraw() {
 	t.printAll()
 }
 
-func (t *Terminal) executeCommand(template string, forcePlus bool, background bool, capture bool, firstLineOnly bool, info string) string {
+func (t *Terminal) executeCommand(template string, forcePlus bool, background bool, capture bool, firstLineOnly bool, info string) (string, error) {
 	line := ""
 	valid, list := t.buildPlusList(template, forcePlus)
 	// 'capture' is used for transform-* and we don't want to
 	// return an empty string in those cases
 	if !valid && !capture {
-		return line
+		return line, errors.New("Invalid")
 	}
 	command, tempFiles := t.replacePlaceholder(template, forcePlus, string(t.input), list)
 	cmd := t.executor.ExecCommand(command, false)
@@ -3204,6 +3207,7 @@ func (t *Terminal) executeCommand(template string, forcePlus bool, background bo
 		cmd.Env = append(cmd.Env, "FZF_INFO="+info)
 	}
 	t.executing.Set(true)
+    var e error
 	if !background {
 		// Open a separate handle for tty input
 		if in, _ := tui.TtyIn(); in != nil {
@@ -3234,7 +3238,7 @@ func (t *Terminal) executeCommand(template string, forcePlus bool, background bo
 			t.uiMutex.Lock()
 		}
 		t.tui.Pause(true)
-		cmd.Run()
+		e = cmd.Run()
 		t.tui.Resume(true, false)
 		t.mutex.Lock()
 		// NOTE: Using t.reqBox.Set(reqFullRedraw...) instead can cause a deadlock
@@ -3270,7 +3274,7 @@ func (t *Terminal) executeCommand(template string, forcePlus bool, background bo
 			}
 			cmd.Wait()
 		} else {
-			cmd.Run()
+			e = cmd.Run()
 		}
 		cancel()
 		if paused.CompareAndSwap(1, 2) {
@@ -3292,7 +3296,7 @@ func (t *Terminal) executeCommand(template string, forcePlus bool, background bo
 	}
 	t.executing.Set(false)
 	removeFiles(tempFiles)
-	return line
+	return line, e
 }
 
 func (t *Terminal) hasPreviewer() bool {
@@ -3464,7 +3468,7 @@ func (t *Terminal) Loop() error {
 				case s := <-intChan:
 					// Don't quit by SIGINT while executing because it should be for the executing command and not for fzf itself
 					if !(s == os.Interrupt && t.executing.Get()) {
-						t.reqBox.Set(reqQuit, nil)
+						t.reqBox.Set(reqQuitInterrupt, nil)
 					}
 				}
 			}
@@ -3537,7 +3541,7 @@ func (t *Terminal) Loop() error {
 				t.previewBox.Wait(func(events *util.Events) {
 					for req, value := range *events {
 						switch req {
-						case reqQuit:
+						case reqQuitOk:
 							stop = true
 							return
 						case reqPreviewEnqueue:
@@ -3711,7 +3715,7 @@ func (t *Terminal) Loop() error {
 		code := ExitError
 		exit := func(getCode func() int) {
 			if t.hasPreviewer() {
-				t.previewBox.Set(reqQuit, nil)
+				t.previewBox.Set(reqQuitOk, nil)
 			}
 			if t.listener != nil {
 				t.listener.Close()
@@ -3860,8 +3864,11 @@ func (t *Terminal) Loop() error {
 					case reqBecome:
 						exit(func() int { return ExitBecome })
 						return
-					case reqQuit:
+					case reqQuitInterrupt:
 						exit(func() int { return ExitInterrupt })
+						return
+					case reqQuitOk:
+						exit(func() int { return ExitOk })
 						return
 					case reqFatal:
 						exit(func() int { return ExitError })
@@ -3976,7 +3983,7 @@ func (t *Terminal) Loop() error {
 		req := func(evts ...util.EventType) {
 			for _, event := range evts {
 				events = append(events, event)
-				if event == reqClose || event == reqQuit {
+				if event == reqClose || event == reqQuitInterrupt || event == reqQuitOk {
 					looping = false
 				}
 			}
@@ -4064,6 +4071,11 @@ func (t *Terminal) Loop() error {
 				t.executeCommand(a.a, false, a.t == actExecuteSilent, false, false, "")
 			case actExecuteMulti:
 				t.executeCommand(a.a, true, false, false, false, "")
+			case actExecuteAndExitOnSuccess:
+				_, e := t.executeCommand(a.a, false, false, false, false, "")
+				if e == nil {
+					req(reqQuitOk)
+				}
 			case actInvalid:
 				t.mutex.Unlock()
 				return false
@@ -4109,12 +4121,12 @@ func (t *Terminal) Loop() error {
 					req(reqPreviewRefresh)
 				}
 			case actTransformPrompt:
-				prompt := t.executeCommand(a.a, false, true, true, true, "")
+				prompt, _ := t.executeCommand(a.a, false, true, true, true, "")
 				t.promptString = prompt
 				t.prompt, t.promptLen = t.parsePrompt(prompt)
 				req(reqPrompt)
 			case actTransformQuery:
-				query := t.executeCommand(a.a, false, true, true, true, "")
+				query, _ := t.executeCommand(a.a, false, true, true, true, "")
 				t.input = []rune(query)
 				t.cx = len(t.input)
 			case actToggleSort:
@@ -4180,7 +4192,7 @@ func (t *Terminal) Loop() error {
 			case actChangeHeader, actTransformHeader:
 				header := a.a
 				if a.t == actTransformHeader {
-					header = t.executeCommand(a.a, false, true, true, false, "")
+					header, _ = t.executeCommand(a.a, false, true, true, false, "")
 				}
 				if t.changeHeader(header) {
 					req(reqHeader, reqList, reqPrompt, reqInfo)
@@ -4200,19 +4212,19 @@ func (t *Terminal) Loop() error {
 					req(reqRedrawPreviewLabel)
 				}
 			case actTransform:
-				body := t.executeCommand(a.a, false, true, true, false, "")
+				body, _ := t.executeCommand(a.a, false, true, true, false, "")
 				if actions, err := parseSingleActionList(strings.Trim(body, "\r\n")); err == nil {
 					return doActions(actions)
 				}
 			case actTransformBorderLabel:
-				label := t.executeCommand(a.a, false, true, true, true, "")
+				label, _ := t.executeCommand(a.a, false, true, true, true, "")
 				t.borderLabelOpts.label = label
 				if t.border != nil {
 					t.borderLabel, t.borderLabelLen = t.ansiLabelPrinter(label, &tui.ColBorderLabel, false)
 					req(reqRedrawBorderLabel)
 				}
 			case actTransformPreviewLabel:
-				label := t.executeCommand(a.a, false, true, true, true, "")
+				label, _ := t.executeCommand(a.a, false, true, true, true, "")
 				t.previewLabelOpts.label = label
 				if t.pborder != nil {
 					t.previewLabel, t.previewLabelLen = t.ansiLabelPrinter(label, &tui.ColPreviewLabel, false)
@@ -4238,18 +4250,18 @@ func (t *Terminal) Loop() error {
 			case actFatal:
 				req(reqFatal)
 			case actAbort:
-				req(reqQuit)
+				req(reqQuitInterrupt)
 			case actDeleteChar:
 				t.delChar()
 			case actDeleteCharEof:
 				if !t.delChar() && t.cx == 0 {
-					req(reqQuit)
+					req(reqQuitInterrupt)
 				}
 			case actEndOfLine:
 				t.cx = len(t.input)
 			case actCancel:
 				if len(t.input) == 0 {
-					req(reqQuit)
+					req(reqQuitInterrupt)
 				} else {
 					t.yanked = t.input
 					t.input = []rune{}
@@ -4257,7 +4269,7 @@ func (t *Terminal) Loop() error {
 				}
 			case actBackwardDeleteCharEof:
 				if len(t.input) == 0 {
-					req(reqQuit)
+					req(reqQuitInterrupt)
 				} else if t.cx > 0 {
 					t.input = append(t.input[:t.cx-1], t.input[t.cx:]...)
 					t.cx--
@@ -4293,7 +4305,7 @@ func (t *Terminal) Loop() error {
 					t.activePreviewOpts.Toggle()
 					updatePreviewWindow(false)
 				} else {
-					req(reqQuit)
+					req(reqQuitInterrupt)
 				}
 			case actSelect:
 				current := t.currentItem()

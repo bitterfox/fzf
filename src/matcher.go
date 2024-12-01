@@ -65,7 +65,7 @@ func (m *Matcher) Loop() {
 		stop := false
 		m.reqBox.Wait(func(events *util.Events) {
 			for t, val := range *events {
-				if t == reqQuit {
+				if t == reqQuitInterrupt || t == reqQuitOk {
 					stop = true
 					return
 				}
@@ -253,5 +253,5 @@ func (m *Matcher) Reset(chunks []*Chunk, patternRunes []rune, cancel bool, final
 }
 
 func (m *Matcher) Stop() {
-	m.reqBox.Set(reqQuit, nil)
+	m.reqBox.Set(reqQuitInterrupt, nil)
 }
