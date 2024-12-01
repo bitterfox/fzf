@@ -55,6 +55,7 @@ var offsetTrimCharsRegex *regexp.Regexp
 var passThroughRegex *regexp.Regexp
 var ttyin *os.File
 
+var whitespacesCache map[int]string = make(map[int]string)
 const clearCode string = "\x1b[2J"
 
 // Number of maximum focus events to process synchronously
@@ -272,6 +273,7 @@ type Terminal struct {
 	history             *History
 	cycle               bool
 	highlightLine       bool
+	fillHeaderTillEnd   bool
 	headerVisible       bool
 	headerFirst         bool
 	headerLines         int
@@ -837,6 +839,7 @@ func NewTerminal(opts *Options, eventBox *util.EventBox, executor *util.Executor
 		paused:              opts.Phony,
 		cycle:               opts.Cycle,
 		highlightLine:       opts.CursorLine,
+		fillHeaderTillEnd:   opts.FillHeader,
 		headerVisible:       true,
 		headerFirst:         opts.HeaderFirst,
 		headerLines:         opts.HeaderLines,
@@ -1831,6 +1834,11 @@ func (t *Terminal) printPrompt() {
 	}
 	t.window.CPrint(color, string(before))
 	t.window.CPrint(color, string(after))
+
+	if t.fillHeaderTillEnd {
+		maxWidth := util.Max(1, t.window.Width()-t.promptLen-1)
+		t.window.CPrint(color, t.whitespaces(maxWidth - (t.queryLen[0] + t.queryLen[1])))
+	}
 }
 
 func (t *Terminal) trimMessage(message string, maxWidth int) string {
@@ -1859,12 +1867,12 @@ func (t *Terminal) printInfo() {
 			idx := (time.Now().UnixNano() % (duration * int64(len(t.spinner)))) / duration
 			t.window.CPrint(tui.ColSpinner, t.spinner[idx])
 		} else {
-			t.window.Print(" ") // Clear spinner
+			t.window.CPrint(tui.ColSpinner, " ") // Clear spinner
 		}
 	}
 	printInfoPrefix := func() {
 		str := t.infoPrefix
-		maxWidth := t.window.Width() - pos
+		maxWidth := t.window.Width() - pos - 1
 		width := util.StringWidth(str)
 		if width > maxWidth {
 			trimmed, _ := t.trimRight([]rune(str), maxWidth)
@@ -1879,12 +1887,24 @@ func (t *Terminal) printInfo() {
 		}
 		pos += width
 	}
-	printSeparator := func(fillLength int, pad bool) {
+	printSeparator := func(fillLength int, pad bool, spaceAtLeft bool, spaceAtRight bool) {
 		if t.separatorLen > 0 {
+			if spaceAtLeft {
+				t.window.CPrint(tui.ColSeparator, " ")
+			}
 			t.separator(t.window, fillLength)
-			t.window.Print(" ")
+			if spaceAtRight {
+				t.window.CPrint(tui.ColSeparator, " ")
+			}
 		} else if pad {
-			t.window.Print(strings.Repeat(" ", fillLength+1))
+			len := fillLength
+			if spaceAtLeft {
+				len += 1
+			}
+			if spaceAtRight {
+				len += 1
+			}
+			t.window.CPrint(tui.ColSeparator, t.whitespaces(len))
 		}
 	}
 
@@ -1893,7 +1913,7 @@ func (t *Terminal) printInfo() {
 			if !move(line+1, 0, false) {
 				return
 			}
-			printSeparator(t.window.Width()-1, false)
+			printSeparator(t.window.Width()-1, false, false, false)
 		}
 		return
 	}
@@ -1947,7 +1967,7 @@ func (t *Terminal) printInfo() {
 			return
 		}
 		printSpinner()
-		t.window.Print(" ") // Margin
+		t.window.CPrint(tui.ColSpinner, " ") // Margin
 		pos = 2
 	case infoRight:
 		if !move(line+1, 0, false) {
@@ -1968,19 +1988,19 @@ func (t *Terminal) printInfo() {
 		}
 		var fillLength int
 		if outputPrinter == nil {
-			output = t.trimMessage(output, maxWidth)
+			output = t.trimMessage(output, maxWidth-1)
 			fillLength = t.window.Width() - len(output) - 2
 		} else {
 			fillLength = t.window.Width() - outputLen - 2
 		}
 		if t.reading {
 			if fillLength >= 2 {
-				printSeparator(fillLength-2, true)
+				printSeparator(fillLength-2, true, false, true)
 			}
 			printSpinner()
-			t.window.Print(" ")
+			t.window.CPrint(tui.ColSpinner, " ")
 		} else if fillLength >= 0 {
-			printSeparator(fillLength, true)
+			printSeparator(fillLength, true, false, true)
 		}
 		if outputPrinter == nil {
 			t.window.CPrint(tui.ColInfo, output)
@@ -1993,16 +2013,15 @@ func (t *Terminal) printInfo() {
 
 	if t.infoStyle == infoInlineRight {
 		if len(t.infoPrefix) == 0 {
-			move(line, pos, false)
 			newPos := util.Max(pos, t.window.Width()-outputLen-3)
-			t.window.Print(strings.Repeat(" ", newPos-pos))
+			move(line, newPos, false)
 			pos = newPos
-			if pos < t.window.Width() {
+			if pos < t.window.Width()-1 {
 				printSpinner()
 				pos++
 			}
 			if pos < t.window.Width()-1 {
-				t.window.Print(" ")
+				t.window.CPrint(tui.ColSpinner, " ")
 				pos++
 			}
 		} else {
@@ -2011,7 +2030,7 @@ func (t *Terminal) printInfo() {
 		}
 	}
 
-	maxWidth := t.window.Width() - pos
+	maxWidth := t.window.Width() - 1 - pos
 	if outputPrinter == nil {
 		output = t.trimMessage(output, maxWidth)
 		t.window.CPrint(tui.ColInfo, output)
@@ -2024,15 +2043,14 @@ func (t *Terminal) printInfo() {
 			if !move(line+1, 0, false) {
 				return
 			}
-			printSeparator(t.window.Width()-1, false)
+			printSeparator(t.window.Width()-1, false, false, false)
 		}
 		return
 	}
 
-	fillLength := maxWidth - outputLen - 2
-	if fillLength > 0 {
-		t.window.CPrint(tui.ColSeparator, " ")
-		printSeparator(fillLength, false)
+	fillLength := maxWidth - outputLen - 1
+	if fillLength >= 0 {
+		printSeparator(fillLength, true, true, false)
 	}
 }
 
@@ -2076,9 +2094,21 @@ func (t *Terminal) printHeader() {
 			text:   util.ToChars([]byte(trimmed)),
 			colors: colors}
 
+		preTask := func(markerClass) {
+			if t.fillHeaderTillEnd {
+				t.window.CPrint(tui.ColHeader, "  ")
+			} else {
+				t.window.Print("  ")
+			}
+		}
+		postTask := func(lineNum int, width int, wrapped bool) {
+			if t.fillHeaderTillEnd {
+				t.window.CPrint(tui.ColHeader, t.whitespaces(t.window.Width() - width - 1 - 2))
+			}
+		}
 		t.printHighlighted(Result{item: item},
 			tui.ColHeader, tui.ColHeader, false, false, line, line, true,
-			func(markerClass) { t.window.Print("  ") }, nil)
+			preTask, postTask)
 	}
 	t.wrap = wrap
 }
@@ -2142,7 +2172,7 @@ func (t *Terminal) printItem(result Result, line int, maxLine int, index int, cu
 		if index < len(t.jumpLabels) {
 			// Striped
 			current = index%2 == 0
-			label = t.jumpLabels[index:index+1] + strings.Repeat(" ", t.pointerLen-1)
+			label = t.jumpLabels[index:index+1] + t.whitespaces(t.pointerLen-1)
 		}
 	} else if current {
 		label = t.pointer
@@ -2181,7 +2211,7 @@ func (t *Terminal) printItem(result Result, line int, maxLine int, index int, cu
 				fillSpaces -= t.wrapSignWidth
 			}
 			if fillSpaces > 0 {
-				t.window.CPrint(color, strings.Repeat(" ", fillSpaces))
+				t.window.CPrint(color, t.whitespaces(fillSpaces))
 			}
 			newLine.width = maxWidth
 		} else {
@@ -2190,7 +2220,7 @@ func (t *Terminal) printItem(result Result, line int, maxLine int, index int, cu
 				fillSpaces -= t.wrapSignWidth
 			}
 			if fillSpaces > 0 {
-				t.window.Print(strings.Repeat(" ", fillSpaces))
+				t.window.Print(t.whitespaces(fillSpaces))
 			}
 			newLine.width = width
 			if wrapped {
@@ -2630,7 +2660,7 @@ func (t *Terminal) makeImageBorder(width int, top bool) string {
 	if top {
 		return tl + strings.Repeat(h, repeat) + tr
 	}
-	return v + strings.Repeat(" ", repeat) + v
+	return v + t.whitespaces(repeat) + v
 }
 
 func (t *Terminal) renderPreviewText(height int, lines []string, lineNo int, unchanged bool) {
@@ -2868,7 +2898,7 @@ func (t *Terminal) processTabs(runes []rune, prefixWidth int) (string, int) {
 		var w int
 		if len(rs) == 1 && rs[0] == '\t' {
 			w = t.tabstop - l%t.tabstop
-			strbuf.WriteString(strings.Repeat(" ", w))
+			strbuf.WriteString(t.whitespaces(w))
 		} else {
 			w = util.StringWidth(str)
 			strbuf.WriteString(str)
@@ -5238,4 +5268,16 @@ func (t *Terminal) dumpStatus(params getParams) string {
 	}
 	bytes, _ := json.Marshal(&dump) // TODO: Errors?
 	return string(bytes)
+}
+
+func (t *Terminal) whitespaces(width int) string {
+	if width <= 0 {
+		return ""
+	}
+	var w, ok = whitespacesCache[width]
+	if !ok {
+		w = strings.Repeat(" ", width)
+		whitespacesCache[width] = w
+	}
+	return w
 }
