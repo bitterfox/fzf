@@ -112,6 +112,7 @@ Usage: fzf [options]
     --color=COLSPEC         Base scheme (dark|light|16|bw) and/or custom colors
     --highlight-line        Highlight the whole current line
     --no-bold               Do not use bold text
+    --fill-header           Fill header line till end
 
   History
     --history=FILE          History file
@@ -498,6 +499,7 @@ type Options struct {
 	MEMProfile   string
 	BlockProfile string
 	MutexProfile string
+	FillHeader   bool
 }
 
 func filterNonEmpty(input []string) []string {
@@ -597,7 +599,8 @@ func defaultOptions() *Options {
 		WalkerRoot:   ".",
 		WalkerSkip:   []string{".git", "node_modules"},
 		Help:         false,
-		Version:      false}
+		Version:      false,
+		FillHeader:   false}
 }
 
 func optString(arg string, prefixes ...string) (bool, string) {
@@ -2182,6 +2185,8 @@ func parseOptions(index *int, opts *Options, allArgs []string) error {
 			opts.Bold = true
 		case "--no-bold":
 			opts.Bold = false
+		case "--fill-header":
+			opts.FillHeader = true
 		case "--layout":
 			str, err := nextString(allArgs, &i, "layout required (default / reverse / reverse-list)")
 			if err != nil {
