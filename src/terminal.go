@@ -321,6 +321,7 @@ type Terminal struct {
 	previewer          previewer
 	previewed          previewed
 	previewBox         *util.EventBox
+	focusPreview       bool
 	eventBox           *util.EventBox
 	mutex              sync.Mutex
 	uiMutex            sync.Mutex
@@ -474,6 +475,7 @@ const (
 	actShowPreview
 	actHidePreview
 	actTogglePreview
+    actTogglePreviewFocus
 	actTogglePreviewWrap
 	actTransform
 	actTransformBorderLabel
@@ -852,6 +854,7 @@ func NewTerminal(opts *Options, eventBox *util.EventBox, executor *util.Executor
 		previewer:          previewer{0, []string{}, 0, false, true, disabledState, "", []bool{}},
 		previewed:          previewed{0, 0, 0, false, false, false, false},
 		previewBox:         previewBox,
+		focusPreview:       false,
 		eventBox:           eventBox,
 		mutex:              sync.Mutex{},
 		uiMutex:            sync.Mutex{},
@@ -1897,6 +1900,9 @@ func (t *Terminal) printInfo() {
 		output += " +T"
 	case trackCurrent:
 		output += " +t"
+	}
+	if t.hasPreviewWindow() && t.focusPreview {
+		output += " <Focusing Preview>"
 	}
 	if t.multi > 0 {
 		if t.multi == maxMulti {
@@ -4085,6 +4091,11 @@ func (t *Terminal) Loop() error {
 						t.cancelPreview()
 					}
 				}
+			case actTogglePreviewFocus:
+				if t.needPreviewWindow() {
+					t.focusPreview = !t.focusPreview
+					req(reqInfo)
+				}
 			case actTogglePreviewWrap:
 				if t.hasPreviewWindow() {
 					t.previewOpts.wrap = !t.previewOpts.wrap
@@ -4335,11 +4346,19 @@ func (t *Terminal) Loop() error {
 					req(reqList)
 				}
 			case actDown:
-				t.vmove(-1, true)
-				req(reqList)
+				if t.hasPreviewWindow() && t.focusPreview {
+					scrollPreviewBy(1)
+				} else {
+					t.vmove(-1, true)
+					req(reqList)
+				}
 			case actUp:
-				t.vmove(1, true)
-				req(reqList)
+				if t.hasPreviewWindow() && t.focusPreview {
+					scrollPreviewBy(-1)
+				} else {
+					t.vmove(1, true)
+					req(reqList)
+				}
 			case actAccept:
 				req(reqClose)
 			case actAcceptNonEmpty:
@@ -4411,23 +4430,31 @@ func (t *Terminal) Loop() error {
 				t.input = append(append(t.input[:t.cx], t.yanked...), suffix...)
 				t.cx += len(t.yanked)
 			case actPageUp:
-				prevOffset := t.offset
-				t.offset = util.Constrain(t.offset - t.maxItems(), 0, util.Max(t.merger.Length() - t.maxItems(), 0))
-				if prevOffset == t.offset {
-					t.vset(0)
+				if t.hasPreviewWindow() && t.focusPreview {
+					scrollPreviewBy(-t.pwindow.Height())
 				} else {
-					t.vset(t.offset + t.maxItems() - 1)
+					prevOffset := t.offset
+					t.offset = util.Constrain(t.offset - t.maxItems(), 0, util.Max(t.merger.Length() - t.maxItems(), 0))
+					if prevOffset == t.offset {
+						t.vset(0)
+					} else {
+						t.vset(t.offset + t.maxItems() - 1)
+					}
+					req(reqList)
 				}
-				req(reqList)
 			case actPageDown:
-				prevOffset := t.offset
-				t.offset = util.Constrain(t.offset + t.maxItems(), 0, util.Max(t.merger.Length() - t.maxItems(), 0))
-				if prevOffset == t.offset {
-					t.vset(t.merger.Length())
+				if t.hasPreviewWindow() && t.focusPreview {
+					scrollPreviewBy(t.pwindow.Height())
 				} else {
-					t.vset(t.offset)
+					prevOffset := t.offset
+					t.offset = util.Constrain(t.offset + t.maxItems(), 0, util.Max(t.merger.Length() - t.maxItems(), 0))
+					if prevOffset == t.offset {
+						t.vset(t.merger.Length())
+					} else {
+						t.vset(t.offset)
+					}
+					req(reqList)
 				}
-				req(reqList)
 			case actHalfPageUp, actHalfPageDown:
 				// Calculate the number of lines to move
 				maxItems := t.maxItems()
